@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TTP — Projekt Übersicht</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Exo+2:wght@300;400;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg0:#040508;--bg1:#080A12;--bg2:#0C0F1A;--bg3:#111525;--bg4:#171C30;
+  --a1:#6C7EF8;--a2:#A855F7;--a3:#F5C542;--a4:#34D399;--a5:#F87171;--a6:#38BDF8;
+  --t1:#EEF0FF;--t2:#A8B2D8;--t3:#5C6488;--border:#1A1F38;
+  --gold:#F5C542;--sidebar-w:240px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg0);color:var(--t1);font:13px/1.6 'Exo 2',system-ui,sans-serif;display:flex;min-height:100vh}
+
+/* SIDEBAR */
+#sidebar{
+  width:var(--sidebar-w);min-height:100vh;background:var(--bg1);
+  border-right:1px solid var(--border);position:sticky;top:0;
+  height:100vh;overflow-y:auto;flex-shrink:0;
+  scrollbar-width:thin;scrollbar-color:var(--bg4) transparent;
+}
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+.logo{
+  padding:18px 16px 14px;border-bottom:1px solid var(--border);
+  font-family:'Cinzel',serif;font-size:12px;font-weight:900;
+  color:var(--gold);letter-spacing:2px;line-height:1.3;
+}
+.logo small{display:block;color:var(--t3);font:400 9px/1 'Exo 2',sans-serif;margin-top:4px;letter-spacing:1px;text-transform:uppercase}
+.logo-icon{font-size:22px;margin-bottom:6px;display:block}
+.cat{padding:14px 14px 5px;font-size:9px;font-weight:700;color:var(--t3);letter-spacing:2px;text-transform:uppercase;font-family:'Exo 2',sans-serif}
+#sidebar a{
+  display:flex;align-items:center;gap:7px;padding:5px 14px 5px 12px;
+  color:var(--t2);text-decoration:none;font-size:11.5px;
+  border-left:2px solid transparent;transition:all .15s;font-family:'Exo 2',sans-serif;
+}
+#sidebar a:hover{background:var(--bg3);color:var(--t1);border-left-color:var(--a1)}
+#sidebar a.active{background:linear-gradient(90deg,rgba(108,126,248,.08),transparent);color:var(--gold);border-left-color:var(--gold);font-weight:700}
+#sidebar a .cnt{margin-left:auto;background:var(--bg4);border-radius:8px;padding:1px 6px;font-size:9px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.sb-footer{padding:12px 14px;border-top:1px solid var(--border);margin-top:8px}
+.sb-footer .ver{font-size:10px;color:var(--t3);font-family:'JetBrains Mono',monospace}
+.sb-footer a{font-size:11px;color:var(--a1);text-decoration:none;display:block;margin-top:4px}
+
+/* PROGRESS IN SIDEBAR */
+.sb-progress{padding:10px 14px;border-bottom:1px solid var(--border)}
+.sb-progress .label{font-size:10px;color:var(--t3);font-family:'Exo 2',sans-serif;margin-bottom:6px;display:flex;justify-content:space-between}
+.progress-bar{height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--a1),var(--a2));border-radius:3px;transition:width .4s ease;width:0%}
+
+/* MOBILE */
+#mob-toggle{display:none;position:fixed;top:12px;left:12px;z-index:1000;
+  background:var(--bg3);border:1px solid var(--border);border-radius:8px;
+  width:38px;height:38px;cursor:pointer;font-size:18px;color:var(--t1);align-items:center;justify-content:center}
+
+/* MAIN */
+#main{flex:1;min-width:0;padding:28px 32px 60px}
+@media(max-width:900px){
+  #mob-toggle{display:flex}
+  #sidebar{position:fixed;left:-260px;top:0;z-index:999;transition:left .25s;box-shadow:4px 0 20px rgba(0,0,0,.5)}
+  #sidebar.open{left:0}
+  #main{padding:20px 16px 60px}
+}
+
+section{margin-bottom:52px;scroll-margin-top:24px}
+
+/* HERO */
+.hero{
+  background:linear-gradient(135deg,#05060F 0%,#0C0821 50%,#050910 100%);
+  border:1px solid rgba(108,126,248,.3);border-radius:16px;
+  padding:32px 36px;margin-bottom:40px;position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;top:-40px;right:-40px;
+  width:240px;height:240px;
+  background:radial-gradient(circle,rgba(108,126,248,.08) 0%,transparent 70%);
+  pointer-events:none;
+}
+.hero h1{font:900 28px/1.1 'Cinzel',serif;color:var(--gold);letter-spacing:2px;margin-bottom:6px}
+.hero p{color:var(--t2);font-size:13px;margin-bottom:20px}
+.stat-grid{display:flex;flex-wrap:wrap;gap:10px}
+.stat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:12px 16px;text-align:center;min-width:80px;transition:border-color .2s}
+.stat:hover{border-color:rgba(108,126,248,.4)}
+.stat .n{font:900 24px/1 'Cinzel',serif;color:var(--gold)}
+.stat .l{font:400 9px/1 'Exo 2',sans-serif;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-top:5px}
+
+/* SECTION HEADER */
+.sec-title{font:900 20px/1.2 'Cinzel',serif;color:var(--gold);display:flex;align-items:center;gap:10px;margin-bottom:8px;letter-spacing:.5px}
+.sec-sub{color:var(--t3);font-size:12px;margin-bottom:18px;line-height:1.7}
+
+/* CARDS GRID */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-bottom:12px}
+
+/* ITEM CARD */
+.card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:18px 20px;transition:border-color .2s, transform .15s;
+  position:relative;overflow:hidden;
+}
+.card:hover{border-color:rgba(108,126,248,.35);transform:translateY(-1px)}
+.card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--a1),var(--a2));
+  opacity:0;transition:opacity .2s;
+}
+.card:hover::before{opacity:1}
+.card-header{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.card-icon{font-size:22px;line-height:1}
+.card-title{font:700 13px/1.2 'Exo 2',sans-serif;color:var(--t1)}
+.card-status{margin-left:auto;flex-shrink:0}
+
+/* STATUS BADGES */
+.status{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:5px;font:700 9px/1 'Exo 2',sans-serif;text-transform:uppercase;letter-spacing:.5px}
+.s-done{background:rgba(52,211,153,.12);color:#34D399;border:1px solid rgba(52,211,153,.2)}
+.s-partial{background:rgba(245,197,66,.12);color:#F5C542;border:1px solid rgba(245,197,66,.2)}
+.s-missing{background:rgba(248,113,113,.12);color:#F87171;border:1px solid rgba(248,113,113,.2)}
+.s-todo{background:rgba(108,126,248,.12);color:#6C7EF8;border:1px solid rgba(108,126,248,.2)}
+
+/* WWW (Was/Wie/Warum) */
+.wwwrow{display:grid;grid-template-columns:52px 1fr;gap:4px 10px;align-items:baseline;margin-bottom:5px}
+.wwwrow:last-child{margin-bottom:0}
+.wwwlabel{font:700 9px/1.4 'JetBrains Mono',monospace;color:var(--t3);text-transform:uppercase;letter-spacing:.5px}
+.wwwtext{font-size:11.5px;color:var(--t2);line-height:1.5}
+.wwwtext strong{color:var(--t1);font-weight:600}
+
+/* CHECKBOX */
+.card-check{
+  position:absolute;top:14px;right:14px;
+  width:18px;height:18px;border-radius:4px;
+  border:1.5px solid var(--border);background:var(--bg3);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;font-size:10px;color:transparent;
+}
+.card-check.checked{background:var(--a4);border-color:var(--a4);color:#fff}
+.card-check:hover{border-color:var(--a4)}
+
+/* DIVIDER */
+.divider{height:1px;background:var(--border);margin:8px 0 14px;border:none}
+
+/* PRIORITY TAG */
+.prio{display:inline-block;padding:1px 7px;border-radius:4px;font:700 9px/1.4 'Exo 2',sans-serif;letter-spacing:.5px;margin-top:8px}
+.prio-high{background:rgba(248,113,113,.12);color:#F87171}
+.prio-med{background:rgba(245,197,66,.12);color:#F5C542}
+.prio-low{background:rgba(52,211,153,.12);color:#34D399}
+
+/* BACK TO TOP */
+#btt{
+  position:fixed;bottom:24px;right:24px;z-index:500;
+  background:var(--bg3);border:1px solid var(--border);border-radius:50%;
+  width:40px;height:40px;cursor:pointer;color:var(--t2);font-size:18px;
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;transition:opacity .3s,border-color .2s;pointer-events:none;
+}
+#btt.show{opacity:1;pointer-events:auto}
+#btt:hover{border-color:var(--a1);color:var(--t1)}
+
+/* NOTE */
+.note{background:var(--bg3);border-left:3px solid var(--a1);border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--t2);line-height:1.6}
+.note.warn{border-left-color:var(--a5);background:rgba(248,113,113,.04)}
+.note.good{border-left-color:var(--a4);background:rgba(52,211,153,.04)}
+</style>
+</head>
+<body>
+
+<button id="mob-toggle" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="logo">
+    <span class="logo-icon">⚔️</span>
+    TOP TIER<br>PROVIDENCE
+    <small>Projekt Übersicht</small>
+  </div>
+
+  <div class="sb-progress">
+    <div class="label">
+      <span>Fortschritt</span>
+      <span id="prog-text">0 / 0</span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+  </div>
+
+  <div class="cat">Kategorien</div>
+  <a href="#systeme">⚙️ Systeme <span class="cnt">12</span></a>
+  <a href="#daten">📦 Daten & Inhalt <span class="cnt">6</span></a>
+  <a href="#studio">🎮 Roblox Studio <span class="cnt">5</span></a>
+
+  <div class="cat">Status</div>
+  <a href="#" onclick="filterCards('all');return false">📋 Alle anzeigen</a>
+  <a href="#" onclick="filterCards('done');return false">✅ Fertig</a>
+  <a href="#" onclick="filterCards('partial');return false">🔶 Teilweise</a>
+  <a href="#" onclick="filterCards('missing');return false">❌ Fehlt</a>
+  <a href="#" onclick="filterCards('todo');return false">🔵 Geplant</a>
+
+  <div class="sb-footer">
+    <div class="ver">v1.0 · 2025</div>
+    <a href="index.html">← Zurück zur Referenz</a>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div id="main">
+
+  <!-- HERO -->
+  <div class="hero">
+    <h1>TTP — Projekt Übersicht</h1>
+    <p>Was wir brauchen · Wie es funktioniert · Warum es wichtig ist</p>
+    <div class="stat-grid">
+      <div class="stat"><div class="n">12</div><div class="l">Systeme</div></div>
+      <div class="stat"><div class="n">6</div><div class="l">Datenpakete</div></div>
+      <div class="stat"><div class="n">5</div><div class="l">Studio Tasks</div></div>
+      <div class="stat"><div class="n" id="hero-done">0</div><div class="l">Erledigt</div></div>
+    </div>
+  </div>
+
+  <!-- ── SYSTEME ── -->
+  <section id="systeme">
+    <h2 class="sec-title">⚙️ Systeme</h2>
+    <div class="sec-sub">Alle Kern-Systeme die das Spiel braucht. Jedes System ist ein eigenes Script-Modul in Roblox Studio.</div>
+
+    <div class="cards">
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">🌀</span>
+          <div>
+            <div class="card-title">Cultivation & Realm System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Das Herzstück. Spieler kultivieren sich durch <strong>26 Realms</strong>, jeder mit mehreren Stages (z.B. Qi Refinement → Ultimate Origin Supreme)</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">EXP sammeln → Stage steigt → bei <strong>Stage 9</strong>: Realm Breakthrough → Heaven Tribulation überstehen → nächster Realm</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Gibt dem Spieler ein klares Fortschrittsziel — alles andere dreht sich darum</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">📊</span>
+          <div>
+            <div class="card-title">EXP & Stage System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Jede Stage braucht eine bestimmte EXP-Menge. EXP-Bedarf steigt pro Realm massiv (<strong>×8, ×60, ×400, ×2500...</strong>)</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">EXP aus NPCs, Quests, Dungeons, Daily Login. <strong>Aptitude Grade</strong> multipliziert alle EXP-Gewinne</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Ohne Progression-Kurve gibt es keinen Anreiz weiterzuspielen</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">⚔️</span>
+          <div>
+            <div class="card-title">Combat System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Kampf gegen NPCs und Bosses mit <strong>HP, Damage, Defense</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Spieler greift an → Schaden = <strong>Damage − Defense</strong>. NPCs greifen zurück. HP auf 0 → Sieg/Tod</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Hauptaktivität im Spiel — bringt EXP und Stone Drops</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">⏳</span>
+          <div>
+            <div class="card-title">Lifespan System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Jeder Spieler hat eine maximale Lebensspanne. Bei <strong>0 → permanenter Tod</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Basis-Realm-Wert × Aptitude Bonus + Boni aus <strong>Items, Life Dao, Sects</strong>. Realm Breakthroughs verlängern sie</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Erzeugt Spannung — macht das Spiel einzigartig gegenüber anderen Roblox-Games</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">⚖️</span>
+          <div>
+            <div class="card-title">Karma System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Gut/Böse-Wert des Spielers von <strong>−1000 bis +1000</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Gute/böse Aktionen ändern Karma. Bei Heaven Tribulation: <strong>≥+800 → halber Schaden, ≤−800 → doppelter Schaden</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Gibt moralische Entscheidungen und beeinflusst direkt die Schwierigkeit</span></div>
+        <span class="prio prio-med">Mittlere Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">🎲</span>
+          <div>
+            <div class="card-title">Providence Roll System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Beim Start zufällig: <strong>Aptitude Grade, Body Type, Fate Mark</strong> bestimmt</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Gewichtete Zufalls-Tabellen (Common häufig, Immortal extrem selten). Ergebnis permanent bis Reroll</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Jeder Charakter einzigartig — motiviert zum Reroll und erhöht Wiederspielwert</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">🏯</span>
+          <div>
+            <div class="card-title">Sect System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Gilden/Fraktionen mit permanenten Boni — z.B. <strong>Lone Star Sect</strong> (Solo), <strong>Myriad Sword Sect</strong> (DMG)</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Ab Realm 2 beitreten. Sect-Level steigt durch Beiträge. Nur <strong>eine Sect</strong> gleichzeitig möglich</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Gibt Spielern eine Identität und Spezialisierung — fördert Wiederspielwert</span></div>
+        <span class="prio prio-med">Mittlere Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">🏛️</span>
+          <div>
+            <div class="card-title">Dungeon System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Instanzierter Kampfbereich mit <strong>3 Floors, 1h Cooldown</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Spieler betritt → kämpft Floors → Boss alle 5 Kills → Rewards: <strong>EXP ×1.5 bis ×4, Stones ×1.5 bis ×4</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Alternative zum normalen Farming mit besseren Rewards und zeitlichem Anreiz</span></div>
+        <span class="prio prio-med">Mittlere Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">📜</span>
+          <div>
+            <div class="card-title">Quest System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext"><strong>54 Quests</strong> mit Aufgaben und Belohnungen (Stones, Items, EXP)</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">NPC/System gibt Quest → Spieler erfüllt Bedingung (X NPCs töten, X Level etc.) → Belohnung ausgeben</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Lenkt neue Spieler, gibt Struktur und zusätzliche Einnahmequellen</span></div>
+        <span class="prio prio-med">Mittlere Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">💊</span>
+          <div>
+            <div class="card-title">Item & Inventory System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext"><strong>236 Items</strong> — Healing Pills, EXP Pills, Lifespan Pills, Waffen, Equipment und mehr</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Drop von NPCs/Dungeons oder Shop-Kauf. Aus Inventory heraus benutzen oder equippen</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Items lösen Probleme der Spieler — sind die Haupt-Geldsinkhole im Spiel</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">🛒</span>
+          <div>
+            <div class="card-title">Shop & Gamepass System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">In-Game Shop für Stones + <strong>Robux-Gamepasses</strong> (×2 Stone Drop, VIP, Fortune Seeker)</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Roblox <strong>MarketplaceService</strong> für Gamepasses, DataStore für gekaufte Pässe speichern</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Monetarisierung des Spiels — Einnahmen für Weiterentwicklung</span></div>
+        <span class="prio prio-med">Mittlere Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">📅</span>
+          <div>
+            <div class="card-title">Daily Login / Streak System</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Tägliche Belohnungen die mit der <strong>Login-Streak steigen</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Timestamp beim Login prüfen → 24h vergangen → Belohnung + Streak +1. Über 48h → Streak reset</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Bringt Spieler täglich zurück — erhöht die Retention stark</span></div>
+        <span class="prio prio-low">Niedrige Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── DATEN ── -->
+  <section id="daten">
+    <h2 class="sec-title">📦 Daten & Inhalt</h2>
+    <div class="sec-sub">Alle Datenpakete als ModuleScripts in Roblox Studio. Zentral gespeichert — alle anderen Scripts lesen daraus.</div>
+
+    <div class="note good">💡 <strong>Tipp:</strong> Alle Daten als <code>ModuleScript</code> anlegen (z.B. <code>CultivationData</code>, <code>NPCData</code>, <code>ItemData</code>). Nie hardcoded in Scripts!</div>
+
+    <div class="cards">
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">⚡</span>
+          <div>
+            <div class="card-title">26 Realm Daten</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Für jeden Realm: <strong>Name, Tier, Stages, Basis-EXP, Lifespan, EXP-Multiplier</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Als <strong>CultivationData.lua</strong> ModuleScript — alle anderen Scripts require() daraus</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Zentrale Basis — ein Wert ändern → überall aktualisiert</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">👾</span>
+          <div>
+            <div class="card-title">NPC Daten — Realm 1–9</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext"><strong>90 NPCs</strong> — je: Name, HP, Damage, Defense, EXP Drop, Stone Drop, Boss ja/nein, Mutation-Chance</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext"><strong>NPCData.lua</strong> Tabelle — NPC-Script liest Werte beim Spawnen per Realm-Key</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Ohne Gegner: kein Combat, keine EXP, keine Progression</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="missing">
+        <div class="card-header">
+          <span class="card-icon">👹</span>
+          <div>
+            <div class="card-title">NPC Daten — Realm 10–26</div>
+            <span class="status s-missing">Fehlt noch</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext"><strong>170 weitere NPCs</strong> für höhere Realms (gleiche Struktur, massiv höhere Werte)</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Stats skalieren mit EXP-Multiplier des Realms. Selbe NPCData.lua erweitern</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Spieler über Realm 9 haben momentan nichts zu bekämpfen</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">💊</span>
+          <div>
+            <div class="card-title">Item Daten — 236 Items</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Jedes Item: <strong>Name, Typ, Effekt, Seltenheit, Drop-Quelle, Preis</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext"><strong>ItemData.lua</strong> — Inventory-System und Shop lesen daraus per Item-ID</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Items sind die Hauptwährung für Spieler-Entscheidungen</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">📜</span>
+          <div>
+            <div class="card-title">Quest Daten — 54 Quests</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Jede Quest: <strong>Name, Beschreibung, Bedingung (Typ + Zielwert), Belohnung</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext"><strong>QuestData.lua</strong> + Quest-Tracker im Spieler-Savedata (welche abgeschlossen)</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Struktur für neue Spieler und zusätzliche Reward-Quelle</span></div>
+        <span class="prio prio-med">Mittlere Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">💫</span>
+          <div>
+            <div class="card-title">Status Effects — 14 Effekte</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Effekte wie <strong>Burn, Stun, Slow, Poison</strong> mit Dauer, Schadenswert, visueller Anzeige</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Effect-Handler Script prüft pro Tick ob ein Effekt aktiv ist und wendet ihn an</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Macht Combat interessanter — Bosse gefährlicher und taktischer</span></div>
+        <span class="prio prio-med">Mittlere Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── ROBLOX STUDIO ── -->
+  <section id="studio">
+    <h2 class="sec-title">🎮 Roblox Studio — Technisches</h2>
+    <div class="sec-sub">Was in Roblox Studio selbst gebaut werden muss. Scripts, GUI, Map und Assets.</div>
+
+    <div class="note warn">⚠️ <strong>Wichtig:</strong> Alle Spiellogik (Schaden, Drops, Saves) NUR auf dem <strong>Server</strong> berechnen — nie auf dem Client. Sonst können Spieler cheaten.</div>
+
+    <div class="cards">
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">💾</span>
+          <div>
+            <div class="card-title">DataStore / Spielerdaten</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Speichert alle Daten: <strong>Realm, EXP, Inventory, Quests, Lifespan, Karma, Sect, Gamepasses</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Roblox <strong>DataStoreService</strong> oder besser <strong>ProfileService</strong> (verhindert Datenverlust durch Session-Locking)</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Ohne Speicherung verliert der Spieler alles beim Ausloggen — absolut notwendig</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="partial">
+        <div class="card-header">
+          <span class="card-icon">📝</span>
+          <div>
+            <div class="card-title">Scripts — Server / Local / Module</div>
+            <span class="status s-partial">Teilweise</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext"><strong>ServerScript</strong> = Spiellogik (Schaden, Drops, Saves) · <strong>LocalScript</strong> = GUI & Input · <strong>ModuleScript</strong> = geteilte Daten</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext"><strong>RemoteEvents</strong> für Client→Server Kommunikation. Server reagiert, prüft, antwortet</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Sicherheit — Schaden nie auf Client berechnen, sonst exploitbar</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="missing">
+        <div class="card-header">
+          <span class="card-icon">🖥️</span>
+          <div>
+            <div class="card-title">GUI — Menüs & HUD</div>
+            <span class="status s-missing">Fehlt noch</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext"><strong>HUD</strong> (HP-Bar, EXP-Bar, Realm-Anzeige) · <strong>Inventory</strong> · <strong>Quest-Log</strong> · <strong>Providence Roll Screen</strong> · <strong>Shop</strong></span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">ScreenGui mit Frames. LocalScript zeigt Daten an, die der Server über <strong>RemoteEvents</strong> sendet</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Spieler müssen ihren Fortschritt sehen — ohne GUI kein Feedback</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="missing">
+        <div class="card-header">
+          <span class="card-icon">🗺️</span>
+          <div>
+            <div class="card-title">Map / World</div>
+            <span class="status s-missing">Fehlt noch</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">Verschiedene <strong>Zonen pro Realm</strong> mit passenden NPCs und Atmosphäre</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Workspace mit Modellen — <strong>NPC-Spawn-Points</strong> als Parts markiert mit Realm-Attribut</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Gibt dem Spiel eine Welt und Atmosphäre — ohne Map gibt es nichts zu erkunden</span></div>
+        <span class="prio prio-high">Höchste Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+      <div class="card" data-status="missing">
+        <div class="card-header">
+          <span class="card-icon">🎨</span>
+          <div>
+            <div class="card-title">NPC Models & Animationen</div>
+            <span class="status s-missing">Fehlt noch</span>
+          </div>
+        </div>
+        <hr class="divider">
+        <div class="wwwrow"><span class="wwwlabel">Was</span><span class="wwwtext">3D-Modelle für jeden NPC-Typ mit <strong>Idle, Walk, Attack</strong> Animationen</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Wie</span><span class="wwwtext">Roblox <strong>Animator</strong> + Animation IDs aus Roblox Animation Editor oder kostenlosen Assets</span></div>
+        <div class="wwwrow"><span class="wwwlabel">Warum</span><span class="wwwtext">Ohne Animationen wirken NPCs leblos — schlechte Spielerfahrung</span></div>
+        <span class="prio prio-med">Mittlere Priorität</span>
+        <div class="card-check" onclick="toggleCheck(this)">✓</div>
+      </div>
+
+    </div>
+  </section>
+
+</div><!-- /main -->
+
+<button id="btt" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
+
+<script>
+// Progress tracking
+function updateProgress(){
+  const all = document.querySelectorAll('.card-check');
+  const done = document.querySelectorAll('.card-check.checked');
+  const total = all.length;
+  const count = done.length;
+  const pct = total ? (count/total*100) : 0;
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('prog-text').textContent = count + ' / ' + total;
+  document.getElementById('hero-done').textContent = count;
+  // Save to localStorage
+  const state = {};
+  all.forEach((el,i) => state[i] = el.classList.contains('checked'));
+  localStorage.setItem('ttp-checklist', JSON.stringify(state));
+}
+
+function toggleCheck(el){
+  el.classList.toggle('checked');
+  updateProgress();
+}
+
+// Load saved state
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = JSON.parse(localStorage.getItem('ttp-checklist') || '{}');
+  document.querySelectorAll('.card-check').forEach((el,i) => {
+    if(saved[i]) el.classList.add('checked');
+  });
+  updateProgress();
+});
+
+// Filter cards
+function filterCards(status){
+  document.querySelectorAll('.card').forEach(card => {
+    if(status === 'all'){
+      card.style.display = '';
+    } else {
+      card.style.display = card.dataset.status === status ? '' : 'none';
+    }
+  });
+}
+
+// Scroll active link
+const sections = document.querySelectorAll('section');
+const sideLinks = document.querySelectorAll('#sidebar a[href^="#"]');
+window.addEventListener('scroll', () => {
+  let cur = '';
+  sections.forEach(s => { if(window.scrollY >= s.offsetTop - 60) cur = s.id; });
+  sideLinks.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#'+cur);
+  });
+  document.getElementById('btt').classList.toggle('show', window.scrollY > 300);
+});
+</script>
+</body>
+</html>

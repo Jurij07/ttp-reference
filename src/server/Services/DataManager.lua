@@ -1,8 +1,6 @@
 --!strict
 -- DataManager.lua
--- Lädt, hält und speichert die Spielerdaten. Nutzt DataStore mit sicherem
--- Fallback auf In-Memory (z.B. wenn in Studio "API Services" nicht aktiv sind),
--- damit das Spiel IMMER startet — auch ohne DataStore-Zugriff.
+-- Lädt / hält / speichert Spielerdaten. DataStore mit In-Memory-Fallback.
 
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
@@ -12,36 +10,38 @@ local Config = require(ReplicatedStorage:WaitForChild("Config"))
 
 local DataManager = {}
 
--- Geladene Profile, Schlüssel = UserId.
 local profiles: { [number]: any } = {}
-
--- Signal, das nach erfolgreichem Laden eines Profils feuert.
 local profileLoadedBindable = Instance.new("BindableEvent")
 DataManager.ProfileLoaded = profileLoadedBindable.Event
 
--- DataStore-Handle (kann nil sein, wenn API-Zugriff fehlt).
 local store: DataStore? = nil
 
--- ── Standard-Profil für neue Spieler ───────────────────────
+-- ── Standard-Profil ────────────────────────────────────────
 local function defaultProfile(): any
 	return {
-		version = 2,
-		providence = nil,            -- { aptitude, physique, connate, dao }
-		providenceConfirmed = false, -- erst nach Bestätigung im Start-Menü true
-		freeRerolls = Config.FREE_REROLLS,
-		realm = 1,
-		stage = 1,
-		exp = 0,
-		spiritStones = Config.STARTING_SPIRIT_STONES,
-		karma = Config.STARTING_KARMA,
-		age = Config.STARTING_AGE,   -- Spieler starten mit Alter 18
-		totalKills = 0,
-		inventory = {},
-		quests = {},
+		version = 3,
+		providence = nil,
+		providenceConfirmed = false,
+		-- Einzelne Rerolls pro Attribut (je FREE_REROLLS_PER_ATTR)
+		rerolls = {
+			aptitude = Config.FREE_REROLLS_PER_ATTR,
+			physique  = Config.FREE_REROLLS_PER_ATTR,
+			connate   = Config.FREE_REROLLS_PER_ATTR,
+			dao       = Config.FREE_REROLLS_PER_ATTR,
+		},
+		realm          = 1,
+		stage          = 1,
+		exp            = 0,
+		spiritStones   = Config.STARTING_SPIRIT_STONES,
+		karma          = Config.STARTING_KARMA,
+		age            = Config.STARTING_AGE,
+		totalKills     = 0,
+		inventory      = {},
+		quests         = {},
 	}
 end
 
--- Fügt fehlende Standard-Felder zu einem geladenen Profil hinzu (Migration).
+-- Migration: fehlende Felder ergänzen und alte Struktur (freeRerolls als Zahl) umwandeln.
 local function reconcile(profile: any)
 	local defaults = defaultProfile()
 	for key, value in pairs(defaults) do
@@ -49,16 +49,25 @@ local function reconcile(profile: any)
 			profile[key] = value
 		end
 	end
+	-- Migration: altes freeRerolls (Zahl) → neue rerolls-Tabelle
+	if type(profile.rerolls) ~= "table" then
+		local old = type(profile.freeRerolls) == "number" and profile.freeRerolls or Config.FREE_REROLLS_PER_ATTR
+		profile.rerolls = {
+			aptitude = math.min(old, Config.FREE_REROLLS_PER_ATTR),
+			physique  = Config.FREE_REROLLS_PER_ATTR,
+			connate   = Config.FREE_REROLLS_PER_ATTR,
+			dao       = Config.FREE_REROLLS_PER_ATTR,
+		}
+		profile.freeRerolls = nil
+	end
 end
 
 local function keyFor(userId: number): string
 	return "player_" .. tostring(userId)
 end
 
--- Lädt das Profil eines Spielers (oder erzeugt ein neues).
 local function loadProfile(player: Player)
 	local profile = defaultProfile()
-
 	if store and Config.USE_DATASTORE then
 		local ok, result = pcall(function()
 			return store:GetAsync(keyFor(player.UserId))
@@ -67,23 +76,16 @@ local function loadProfile(player: Player)
 			profile = result
 			reconcile(profile)
 		elseif not ok then
-			warn(("[DataManager] Laden fehlgeschlagen für %s, nutze Standardprofil: %s"):format(player.Name, tostring(result)))
+			warn(("[DataManager] Laden fehlgeschlagen für %s: %s"):format(player.Name, tostring(result)))
 		end
 	end
-
 	profiles[player.UserId] = profile
 	profileLoadedBindable:Fire(player)
 end
 
--- Speichert das Profil eines Spielers.
 function DataManager.Save(player: Player)
 	local profile = profiles[player.UserId]
-	if not profile then
-		return
-	end
-	if not (store and Config.USE_DATASTORE) then
-		return -- In-Memory-Modus: nichts zu tun
-	end
+	if not profile or not (store and Config.USE_DATASTORE) then return end
 	local ok, err = pcall(function()
 		store:SetAsync(keyFor(player.UserId), profile)
 	end)
@@ -92,7 +94,6 @@ function DataManager.Save(player: Player)
 	end
 end
 
--- Gibt das geladene Profil zurück (oder nil, falls noch nicht geladen).
 function DataManager.Get(player: Player): any
 	return profiles[player.UserId]
 end
@@ -101,18 +102,13 @@ function DataManager.IsLoaded(player: Player): boolean
 	return profiles[player.UserId] ~= nil
 end
 
--- Startet den Service: DataStore holen, Player-Events verbinden, Autosave-Loop.
 function DataManager.Start()
 	if Config.USE_DATASTORE then
 		local ok, result = pcall(function()
 			return DataStoreService:GetDataStore(Config.DATASTORE_NAME)
 		end)
-		if ok then
-			store = result
-		else
-			warn("[DataManager] Kein DataStore-Zugriff — laufe im In-Memory-Modus. " ..
-				"(In Studio: Game Settings → Security → 'Enable Studio Access to API Services')")
-		end
+		if ok then store = result
+		else warn("[DataManager] Kein DataStore — In-Memory-Modus. (Studio: Game Settings → Security → Enable API Services)") end
 	end
 
 	Players.PlayerAdded:Connect(loadProfile)
@@ -121,14 +117,12 @@ function DataManager.Start()
 		profiles[player.UserId] = nil
 	end)
 
-	-- Falls beim Start (Live-Sync) schon Spieler da sind.
 	for _, player in ipairs(Players:GetPlayers()) do
 		if not profiles[player.UserId] then
 			task.spawn(loadProfile, player)
 		end
 	end
 
-	-- Autosave-Loop.
 	task.spawn(function()
 		while true do
 			task.wait(Config.AUTOSAVE_INTERVAL)
@@ -138,7 +132,6 @@ function DataManager.Start()
 		end
 	end)
 
-	-- Beim Server-Shutdown alles speichern.
 	game:BindToClose(function()
 		for _, player in ipairs(Players:GetPlayers()) do
 			DataManager.Save(player)

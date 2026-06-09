@@ -1,14 +1,12 @@
 --!strict
 -- ProvidenceService.lua
--- Verwaltet das Providence-System: würfelt die 4 Attribute (Aptitude, Physique,
--- Connate, Dao), stellt die Stat-Multiplikatoren bereit und steuert das
--- Start-Menü (Roll → Reroll → Bestätigen). Vor der Bestätigung ist der Spieler
--- im Menü-Zustand (InMenu) und kann nicht spielen.
+-- Verwaltet Providence: würfelt 4 Attribute einzeln, steuert das Startmenü.
+-- Nach dem Bestätigen sind KEINE freien Rerolls mehr möglich (nur Robux).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameData = ReplicatedStorage:WaitForChild("GameData")
-local AptitudeData = require(GameData:WaitForChild("AptitudeData"))
+local AptitudeData  = require(GameData:WaitForChild("AptitudeData"))
 local ProvidenceData = require(GameData:WaitForChild("ProvidenceData"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 
@@ -16,98 +14,121 @@ local DataManager = require(script.Parent.DataManager)
 
 local ProvidenceService = {}
 
--- Schreibt die Providence-Attribute auf den Player (replizieren zum Client).
-local function applyAttributes(player: Player, providence: any)
-	player:SetAttribute("Aptitude", providence.aptitude)
-	player:SetAttribute("Physique", providence.physique)
-	player:SetAttribute("Connate", providence.connate)
-	player:SetAttribute("DaoAffinity", providence.dao)
+-- ── Attribute auf den Player schreiben ─────────────────────
+local function applyAttributes(player: Player, prov: any, rerolls: any)
+	player:SetAttribute("Aptitude",    prov.aptitude)
+	player:SetAttribute("Physique",    prov.physique)
+	player:SetAttribute("Connate",     prov.connate)
+	player:SetAttribute("DaoAffinity", prov.dao)
 
-	local grade = AptitudeData.GetByName(providence.aptitude)
+	local grade = AptitudeData.GetByName(prov.aptitude)
 	player:SetAttribute("AptitudeMult", grade and grade.mult or 1.0)
+
+	-- Individuelle Reroll-Zähler
+	player:SetAttribute("Rerolls_Aptitude", rerolls.aptitude)
+	player:SetAttribute("Rerolls_Physique",  rerolls.physique)
+	player:SetAttribute("Rerolls_Connate",   rerolls.connate)
+	player:SetAttribute("Rerolls_Dao",       rerolls.dao)
 end
 
--- Würfelt einen kompletten neuen Providence-Satz.
+-- ── Kompletten Providence-Satz würfeln ─────────────────────
 local function rollAll(): any
 	return {
 		aptitude = AptitudeData.Roll().name,
-		physique = ProvidenceData.RollPhysique().name,
-		connate = ProvidenceData.RollConnate().name,
-		dao = ProvidenceData.RollDao(),
+		physique  = ProvidenceData.RollPhysique().name,
+		connate   = ProvidenceData.RollConnate().name,
+		dao       = ProvidenceData.RollDao(),
 	}
 end
 
--- Stellt sicher, dass ein Spieler einen (Vorschau-)Providence-Satz hat.
+-- ── Sicherstellen, dass Spieler einen Providence-Satz hat ──
 function ProvidenceService.EnsureRolled(player: Player, profile: any)
 	if not profile.providence then
 		profile.providence = rollAll()
 	end
-	applyAttributes(player, profile.providence)
-	player:SetAttribute("FreeRerolls", profile.freeRerolls)
+	applyAttributes(player, profile.providence, profile.rerolls)
 end
 
--- Liefert die kombinierten Stat-Multiplikatoren eines Spielers.
-function ProvidenceService.GetMultipliers(player: Player): { hp: number, dmg: number, def: number, exp: number }
+-- ── Stat-Multiplikatoren ────────────────────────────────────
+function ProvidenceService.GetMultipliers(player: Player): { hp: number, dmg: number, def: number, exp: number, lifespan: number }
 	local profile = DataManager.Get(player)
 	local prov = profile and profile.providence
 
 	local physique = prov and ProvidenceData.GetPhysique(prov.physique)
-	local connate = prov and ProvidenceData.GetConnate(prov.connate)
-	local grade = prov and AptitudeData.GetByName(prov.aptitude)
+	local connate  = prov and ProvidenceData.GetConnate(prov.connate)
+	local grade    = prov and AptitudeData.GetByName(prov.aptitude)
 
-	local statBonus = connate and connate.statBonus or 1.0
+	local statBonus    = connate and connate.statBonus    or 1.0
+	local lifespanMult = connate and connate.lifespanMult or 1.0
 
 	return {
-		hp = (physique and physique.hpMult or 1.0) * statBonus,
-		dmg = (physique and physique.dmgMult or 1.0) * statBonus,
-		def = (physique and physique.defMult or 1.0) * statBonus,
-		exp = (physique and physique.expMult or 1.0) * (grade and grade.mult or 1.0),
+		hp       = (physique and physique.hpMult  or 1.0) * statBonus,
+		dmg      = (physique and physique.dmgMult or 1.0) * statBonus,
+		def      = (physique and physique.defMult or 1.0) * statBonus,
+		exp      = (physique and physique.expMult or 1.0) * (grade and grade.mult or 1.0),
+		lifespan = lifespanMult,
 	}
 end
 
--- Würfelt neu (verbraucht ein kostenloses Reroll-Credit).
--- Gibt (success, providence | fehlermeldung) zurück.
-function ProvidenceService.Reroll(player: Player): (boolean, any)
+-- ── Einzelnes Attribut neu würfeln ─────────────────────────
+-- attrName: "aptitude" | "physique" | "connate" | "dao"
+function ProvidenceService.RerollAttr(player: Player, attrName: string): (boolean, string)
 	local profile = DataManager.Get(player)
-	if not profile then
-		return false, "Kein Profil geladen."
-	end
-	if profile.freeRerolls <= 0 then
-		return false, "Keine kostenlosen Rerolls mehr (Robux-Reroll folgt später)."
-	end
-	profile.freeRerolls -= 1
-	profile.providence = rollAll()
-	applyAttributes(player, profile.providence)
-	player:SetAttribute("FreeRerolls", profile.freeRerolls)
+	if not profile then return false, "Kein Profil geladen." end
 
-	-- Falls bereits bestätigt (In-Game-Reroll): Stats sofort neu berechnen.
+	-- Nach Bestätigung gesperrt
 	if profile.providenceConfirmed then
-		local CultivationService = require(script.Parent.CultivationService)
-		CultivationService.RecomputeStats(player)
+		return false, "Providence bereits bestätigt — weitere Rerolls nur mit Robux."
 	end
-	return true, profile.providence
+
+	-- Validiere attrName
+	local validAttrs = { aptitude = true, physique = true, connate = true, dao = true }
+	if not validAttrs[attrName] then
+		return false, "Unbekanntes Attribut."
+	end
+
+	-- Prüfe Reroll-Zähler
+	local remaining = profile.rerolls[attrName] or 0
+	if remaining <= 0 then
+		return false, ("Keine freien %s-Rerolls mehr."):format(attrName)
+	end
+
+	-- Würfeln
+	profile.rerolls[attrName] = remaining - 1
+	if attrName == "aptitude" then
+		profile.providence.aptitude = AptitudeData.Roll().name
+	elseif attrName == "physique" then
+		profile.providence.physique = ProvidenceData.RollPhysique().name
+	elseif attrName == "connate" then
+		profile.providence.connate = ProvidenceData.RollConnate().name
+	elseif attrName == "dao" then
+		profile.providence.dao = ProvidenceData.RollDao()
+	end
+
+	applyAttributes(player, profile.providence, profile.rerolls)
+	return true, "OK"
 end
 
--- Bestätigt die Providence und startet das Gameplay.
+-- ── Providence bestätigen → Gameplay starten ───────────────
 function ProvidenceService.Confirm(player: Player)
 	local profile = DataManager.Get(player)
-	if not profile then
-		return
-	end
+	if not profile then return end
+	if profile.providenceConfirmed then return end
 	profile.providenceConfirmed = true
 	local CultivationService = require(script.Parent.CultivationService)
 	CultivationService.BeginGameplay(player)
 end
 
+-- ── Service-Start ──────────────────────────────────────────
 function ProvidenceService.Start()
-	local rerollEvent = Net.Event("RerollProvidence")
-	rerollEvent.OnServerEvent:Connect(function(player)
-		local ok, payload = ProvidenceService.Reroll(player)
-		local profile = DataManager.Get(player)
-		rerollEvent:FireClient(player, ok, payload, profile and profile.freeRerolls or 0)
+	local rerollEvent   = Net.Event("RerollAttr")
+	local confirmEvent  = Net.Event("ConfirmProvidence")
+
+	rerollEvent.OnServerEvent:Connect(function(player, attrName)
+		local ok, msg = ProvidenceService.RerollAttr(player, tostring(attrName))
+		rerollEvent:FireClient(player, ok, msg)
 	end)
 
-	local confirmEvent = Net.Event("ConfirmProvidence")
 	confirmEvent.OnServerEvent:Connect(function(player)
 		ProvidenceService.Confirm(player)
 	end)

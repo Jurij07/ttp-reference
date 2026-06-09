@@ -1,62 +1,174 @@
 --!strict
 -- ProvidenceData.lua
--- Das Kernsystem: beim ersten Join werden 4 Attribute gerollt, die das
--- gesamte Spiel des Charakters definieren — Physique, Connate Providence,
--- Dao Affinity (Aptitude liegt in AptitudeData). Werte aus der Spielreferenz.
+-- 4 Providence-Attribute mit PROS UND CONS — 1:1 an xianxia-Romane angelehnt.
+-- Physique:  Körper-Typ, bestimmt Kampf- und Kultivierungs-Stärken/Schwächen
+-- Connate:   Verborgende Seltenheit (beeinflußt Stats UND Lebensspanne)
+-- Dao:       Dao-Neigung (zukünftige Techniken)
 
 local ProvidenceData = {}
 
--- ── Physique (Körper-Typ) ──────────────────────────────────
--- Werte sind die kombinierten Multiplikatoren bei Max-Stufe.
+-- ── Physique ───────────────────────────────────────────────
 export type Physique = {
 	name: string,
 	role: string,
 	chance: number,
-	hpMult: number,    -- Faktor auf MaxHP (1.0 = neutral)
-	dmgMult: number,   -- Faktor auf Damage
-	defMult: number,   -- Faktor auf Defense
-	expMult: number,   -- Faktor auf EXP-Gewinn
+	hpMult: number,
+	dmgMult: number,
+	defMult: number,
+	expMult: number,
+	pros: string,
+	cons: string,
+	lore: string,
 	color: string,
 }
 
 ProvidenceData.PHYSIQUES = {
-	{ name = "Heaven Sealing", role = "Balanced", chance = 25, hpMult = 1.5,  dmgMult = 1.5,  defMult = 1.5,  expMult = 1.5,  color = "FCD34D" },
-	{ name = "Six Paths",      role = "Combat",   chance = 25, hpMult = 1.3,  dmgMult = 1.6,  defMult = 1.3,  expMult = 1.6,  color = "A78BFA" },
-	{ name = "Calamity Star",  role = "DMG",      chance = 25, hpMult = 1.0,  dmgMult = 1.7,  defMult = 1.0,  expMult = 1.0,  color = "FBBF24" },
-	{ name = "Mortal Body",    role = "Tank",     chance = 25, hpMult = 1.5,  dmgMult = 1.0,  defMult = 1.35, expMult = 1.0,  color = "9CA3AF" },
+	{
+		name = "Heaven Sealing",
+		role = "Ausgewogen",
+		chance = 28,
+		hpMult = 1.5, dmgMult = 1.5, defMult = 1.5, expMult = 0.9,
+		pros = "HP +50% · DMG +50% · DEF +50%",
+		cons = "EXP −10% (Himmelsketten drosseln das Kultivieren)",
+		lore = "Vom Himmel selbst versiegelt — und beschützt. Gleichgewicht in allem, doch der Himmel fesselt deine Geschwindigkeit.",
+		color = "FCD34D",
+	},
+	{
+		name = "Six Paths",
+		role = "Kampf",
+		chance = 22,
+		hpMult = 1.0, dmgMult = 2.0, defMult = 0.8, expMult = 1.6,
+		pros = "DMG ×2.0 · EXP +60%",
+		cons = "DEF −20% (zu aggressiv zum Verteidigen)",
+		lore = "Verkörpert die Sechs Pfade der Reinkarnation. Jeder Kampf bringt Einsicht — aber der Körper ist anfällig.",
+		color = "A78BFA",
+	},
+	{
+		name = "Calamity Star",
+		role = "Glaskanone",
+		chance = 18,
+		hpMult = 0.7, dmgMult = 2.5, defMult = 0.6, expMult = 1.2,
+		pros = "DMG ×2.5 · EXP +20%",
+		cons = "HP −30% · DEF −40% (Katastrophe trifft auch dich)",
+		lore = "Unter einem Unstern geboren — Glück und Unheil im gleichen Atemzug. Vernichtet Feinde, doch das Schicksal schlägt zurück.",
+		color = "F87171",
+	},
+	{
+		name = "Mortal Sacred",
+		role = "Tank",
+		chance = 20,
+		hpMult = 2.2, dmgMult = 0.7, defMult = 2.0, expMult = 0.6,
+		pros = "HP ×2.2 · DEF ×2.0",
+		cons = "DMG −30% · EXP −40% (langsam zum Erblühen)",
+		lore = "Scheinbar der schwächste aller Körper — in Wahrheit ein schlummernder Heiliger. Zeit und Leiden verwandeln Sterbliches in Göttliches.",
+		color = "94A3B8",
+	},
+	{
+		name = "Peerless Saint",
+		role = "Kultivator",
+		chance = 9,
+		hpMult = 1.2, dmgMult = 1.2, defMult = 1.2, expMult = 3.0,
+		pros = "EXP ×3.0 · alle Stats +20%",
+		cons = "Keine Kampf-Spezialisierung",
+		lore = "Ein Körper, der für das Kultivieren geschaffen wurde. Der Dao offenbart sich schneller als bei allen anderen — kämpfen ist Nebensache.",
+		color = "34D399",
+	},
+	{
+		name = "Blood Demon",
+		role = "Berserker",
+		chance = 3,
+		hpMult = 0.8, dmgMult = 3.0, defMult = 0.5, expMult = 1.5,
+		pros = "DMG ×3.0 · EXP +50%",
+		cons = "HP −20% · DEF −50% · zieht Himmelsgerichte an",
+		lore = "Von dämonischem Blut verflucht und gesegnet. Unvergleichliche Vernichtungskraft — doch der Himmel selbst versucht dich zu zerschmettern.",
+		color = "EF4444",
+	},
 } :: { Physique }
 
--- ── Connate Providence (geheime Seltenheit) ────────────────
+-- ── Connate Providence (mit Lebensspannen-Faktor) ──────────
 export type Connate = {
 	name: string,
 	chance: number,
-	statBonus: number, -- pauschaler Bonus auf alle Stats (1.0 = +0%)
+	statBonus: number,    -- globaler Stat-Multiplikator
+	lifespanMult: number, -- Faktor auf die Realm-Lebensspanne
+	pros: string,
+	cons: string,
 }
 
 ProvidenceData.CONNATES = {
-	{ name = "Common",    chance = 50.0,  statBonus = 1.00 },
-	{ name = "Uncommon",  chance = 25.0,  statBonus = 1.05 },
-	{ name = "Rare",      chance = 13.0,  statBonus = 1.12 },
-	{ name = "Epic",      chance = 7.0,   statBonus = 1.20 },
-	{ name = "Legendary", chance = 3.5,   statBonus = 1.35 },
-	{ name = "Mythic",    chance = 1.2,   statBonus = 1.55 },
-	{ name = "Divine",    chance = 0.3,   statBonus = 2.00 },
+	{
+		name = "Common",    chance = 44.0, statBonus = 1.00, lifespanMult = 1.00,
+		pros = "Keine Einschränkungen",
+		cons = "Kein Bonus",
+	},
+	{
+		name = "Uncommon",  chance = 25.0, statBonus = 1.05, lifespanMult = 1.00,
+		pros = "Alle Stats +5%",
+		cons = "—",
+	},
+	{
+		name = "Rare",      chance = 14.0, statBonus = 1.12, lifespanMult = 1.00,
+		pros = "Alle Stats +12%",
+		cons = "—",
+	},
+	{
+		name = "Epic",      chance = 8.5,  statBonus = 1.22, lifespanMult = 1.05,
+		pros = "Alle Stats +22% · Lebensspanne +5%",
+		cons = "—",
+	},
+	{
+		name = "Legendary", chance = 5.0,  statBonus = 1.40, lifespanMult = 1.10,
+		pros = "Alle Stats +40% · Lebensspanne +10%",
+		cons = "—",
+	},
+	{
+		name = "Mythic",    chance = 2.0,  statBonus = 1.70, lifespanMult = 0.85,
+		pros = "Alle Stats +70%",
+		cons = "Lebensspanne −15% (Himmel neidet dir)",
+	},
+	{
+		name = "Divine",    chance = 1.0,  statBonus = 2.20, lifespanMult = 0.70,
+		pros = "Alle Stats ×2.2",
+		cons = "Lebensspanne −30% (Himmelsgunst macht kurzes Leben)",
+	},
+	{
+		name = "Chaos",     chance = 0.5,  statBonus = 3.00, lifespanMult = 0.50,
+		pros = "Alle Stats ×3.0",
+		cons = "Lebensspanne −50% (jenseits des Himmelsplans)",
+	},
 } :: { Connate }
 
 -- ── Dao Affinity ───────────────────────────────────────────
-ProvidenceData.DAO_AFFINITIES = {
-	"Sword", "Fire", "Void", "Life", "Thunder", "Ice", "Earth", "Space",
+export type DaoEntry = {
+	name: string,
+	desc: string,
+	color: string,
 }
 
--- Gewichteter Roll über eine Liste mit `chance`-Feldern.
+ProvidenceData.DAO_DATA = {
+	{ name = "Sword",   desc = "Schneidet durch alles. Offensive Perfektion.",                  color = "F87171" },
+	{ name = "Fire",    desc = "Verbrennendes Qi. Reinigt Unreinheiten durch Flammen.",          color = "FB923C" },
+	{ name = "Void",    desc = "Die Leere zwischen den Welten. Nichts und Raum als Waffe.",      color = "A78BFA" },
+	{ name = "Life",    desc = "Der Fluss der Vitalität. Verbesserte Heilung und Langlebigkeit.", color = "34D399" },
+	{ name = "Thunder", desc = "Himmelsblitz in körperlicher Form. Geschwindigkeit und Macht.",  color = "FBBF24" },
+	{ name = "Ice",     desc = "Unbewegte Kälte. Verlangsamt Feinde, kristallisiert Qi.",        color = "67E8F9" },
+	{ name = "Earth",   desc = "Unerschütterlich wie ein Berg. Defensive Macht und Ausdauer.",   color = "A3E635" },
+	{ name = "Space",   desc = "Realität selbst verbiegen. Teleportation, dimensionale Kräfte.", color = "818CF8" },
+} :: { DaoEntry }
+
+-- Für Rückwärtskompatibilität: DAO_AFFINITIES als Name-Liste
+ProvidenceData.DAO_AFFINITIES = {}
+for _, d in ipairs(ProvidenceData.DAO_DATA) do
+	table.insert(ProvidenceData.DAO_AFFINITIES, d.name)
+end
+
+-- ── Gewichtetes Würfeln ────────────────────────────────────
 local function weightedRoll<T>(list: { T }): T
 	local roll = math.random() * 100
 	local cumulative = 0
 	for _, entry in ipairs(list) do
 		cumulative += (entry :: any).chance
-		if roll <= cumulative then
-			return entry
-		end
+		if roll <= cumulative then return entry end
 	end
 	return list[1]
 end
@@ -70,8 +182,8 @@ function ProvidenceData.RollConnate(): Connate
 end
 
 function ProvidenceData.RollDao(): string
-	local list = ProvidenceData.DAO_AFFINITIES
-	return list[math.random(1, #list)]
+	local list = ProvidenceData.DAO_DATA
+	return list[math.random(1, #list)].name
 end
 
 function ProvidenceData.GetPhysique(name: string): Physique?
@@ -84,6 +196,13 @@ end
 function ProvidenceData.GetConnate(name: string): Connate?
 	for _, c in ipairs(ProvidenceData.CONNATES) do
 		if c.name == name then return c end
+	end
+	return nil
+end
+
+function ProvidenceData.GetDaoData(name: string): DaoEntry?
+	for _, d in ipairs(ProvidenceData.DAO_DATA) do
+		if d.name == name then return d end
 	end
 	return nil
 end

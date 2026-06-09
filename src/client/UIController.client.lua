@@ -12,6 +12,10 @@ local Net          = require(ReplicatedStorage:WaitForChild("Net"))
 local GameData     = ReplicatedStorage:WaitForChild("GameData")
 local AptitudeData  = require(GameData:WaitForChild("AptitudeData"))
 local ProvidenceData = require(GameData:WaitForChild("ProvidenceData"))
+local ShopData      = require(GameData:WaitForChild("ShopData"))
+local QuestData     = require(GameData:WaitForChild("QuestData"))
+local TechniqueData = require(GameData:WaitForChild("TechniqueData"))
+local Buffs         = require(ReplicatedStorage:WaitForChild("Buffs"))
 
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -153,6 +157,14 @@ local inventoryLayer = Instance.new("Frame"); inventoryLayer.Name = "InventoryLa
 inventoryLayer.Size = UDim2.fromScale(1,1); inventoryLayer.BackgroundColor3 = C.bg0
 inventoryLayer.BackgroundTransparency = 0.3; inventoryLayer.Visible = false; inventoryLayer.Parent = gui
 
+local shopLayer = Instance.new("Frame"); shopLayer.Name = "ShopLayer"
+shopLayer.Size = UDim2.fromScale(1,1); shopLayer.BackgroundColor3 = C.bg0
+shopLayer.BackgroundTransparency = 0.3; shopLayer.Visible = false; shopLayer.Parent = gui
+
+local questLayer = Instance.new("Frame"); questLayer.Name = "QuestLayer"
+questLayer.Size = UDim2.fromScale(1,1); questLayer.BackgroundColor3 = C.bg0
+questLayer.BackgroundTransparency = 0.3; questLayer.Visible = false; questLayer.Parent = gui
+
 -- ════════════════════════════════════════════════════════════
 -- ── HUD ─────────────────────────────────────────────────────
 -- ════════════════════════════════════════════════════════════
@@ -257,30 +269,23 @@ end
 -- ════════════════════════════════════════════════════════════
 -- ── Inventar-Overlay
 -- ════════════════════════════════════════════════════════════
-local invCard = mkPanel("InvCard",UDim2.new(0,500,0,400),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), inventoryLayer)
+local invCard = mkPanel("InvCard",UDim2.new(0,520,0,440),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), inventoryLayer)
 mkLabel(invCard,"🎒  INVENTAR",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
 local closeInv = mkButton(invCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
 
-local invGrid = Instance.new("Frame")
-invGrid.Size = UDim2.new(1,-20,1,-60); invGrid.Position = UDim2.fromOffset(10,52)
-invGrid.BackgroundTransparency = 1; invGrid.Parent = invCard
-local gridLayout = Instance.new("UIGridLayout")
-gridLayout.CellSize = UDim2.fromOffset(70,70); gridLayout.CellPadding = UDim2.fromOffset(6,6)
-gridLayout.Parent = invGrid
+local invScroll = Instance.new("ScrollingFrame")
+invScroll.Size = UDim2.new(1,-20,1,-58); invScroll.Position = UDim2.fromOffset(10,50)
+invScroll.BackgroundTransparency = 1; invScroll.BorderSizePixel = 0
+invScroll.ScrollBarThickness = 5; invScroll.ScrollBarImageColor3 = C.bg5
+invScroll.CanvasSize = UDim2.new(); invScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+invScroll.Parent = invCard
+local invListLayout = Instance.new("UIListLayout")
+invListLayout.SortOrder = Enum.SortOrder.LayoutOrder; invListLayout.Padding = UDim.new(0,6)
+invListLayout.Parent = invScroll
 
-local invEmpty = mkLabel(invGrid,"— Inventar leer —",UDim2.fromScale(1,0.15),UDim2.fromScale(0,0.4),C.t3,14,nil,Enum.TextXAlignment.Center)
-invEmpty.Size = UDim2.fromScale(1,0.15)  -- override to full width
-
--- Platzhalter-Slots
-for i = 1, 30 do
-	local slot = Instance.new("Frame")
-	slot.Size = UDim2.fromOffset(70,70)
-	slot.BackgroundColor3 = C.bg4
-	slot.BorderSizePixel = 0
-	corner(slot, 6); stroke(slot, C.border)
-	slot.Parent = invGrid
-	mkLabel(slot,"",UDim2.fromScale(1,1),UDim2.fromOffset(0,0),C.t3,11,nil,Enum.TextXAlignment.Center)
-end
+local invEmpty = mkLabel(invCard,"— Inventar leer —\nKaufe Pillen im Shop 🏪",
+	UDim2.new(1,-40,0,50), UDim2.fromOffset(20,180), C.t3, 14, nil, Enum.TextXAlignment.Center)
+invEmpty.TextYAlignment = Enum.TextYAlignment.Center
 
 -- ════════════════════════════════════════════════════════════
 -- ── Providence-Start-Menü
@@ -710,8 +715,9 @@ end)
 -- ── Hauptmenü + Inventar Buttons ────────────────────────────
 -- ════════════════════════════════════════════════════════════
 mainMenuBtn.MouseButton1Click:Connect(function()
-	inventoryLayer.Visible = false
-	mainMenuLayer.Visible = not mainMenuLayer.Visible
+	local wasOpen = mainMenuLayer.Visible
+	inventoryLayer.Visible = false; shopLayer.Visible = false; questLayer.Visible = false
+	mainMenuLayer.Visible = not wasOpen
 end)
 
 closeMainMenu.MouseButton1Click:Connect(function()
@@ -719,8 +725,9 @@ closeMainMenu.MouseButton1Click:Connect(function()
 end)
 
 invBtn.MouseButton1Click:Connect(function()
-	mainMenuLayer.Visible = false
-	inventoryLayer.Visible = not inventoryLayer.Visible
+	local wasOpen = inventoryLayer.Visible
+	mainMenuLayer.Visible = false; shopLayer.Visible = false; questLayer.Visible = false
+	inventoryLayer.Visible = not wasOpen
 end)
 
 closeInv.MouseButton1Click:Connect(function()
@@ -795,4 +802,280 @@ Net.Event("CombatHit").OnClientEvent:Connect(function(_name, amount)
 	tw:Play(); tw.Completed:Connect(function() d:Destroy() end)
 end)
 
-print("[TTP] UIController geladen.")
+-- ════════════════════════════════════════════════════════════
+-- ── Erweiterte HUD-Buttons (Shop / Quests / Technik / Buffs) ─
+-- ════════════════════════════════════════════════════════════
+local shopBtn  = mkButton(hudRoot,"🏪",UDim2.new(0,46,0,46),UDim2.new(1,-14,1,-66), C.bg4,Vector2.new(1,1))
+local questBtn = mkButton(hudRoot,"📜",UDim2.new(0,46,0,46),UDim2.new(1,-14,1,-118),C.bg4,Vector2.new(1,1))
+
+-- Grüner Punkt auf dem Quest-Button, wenn Belohnungen abholbereit sind.
+local questDot = Instance.new("Frame")
+questDot.Size = UDim2.fromOffset(14,14); questDot.AnchorPoint = Vector2.new(1,0)
+questDot.Position = UDim2.new(1,-1,0,1); questDot.BackgroundColor3 = C.green
+questDot.BorderSizePixel = 0; questDot.Visible = false; corner(questDot,7)
+stroke(questDot, C.bg0); questDot.Parent = questBtn
+
+-- Technik-Button (rechts neben der HP-Leiste).
+local techBtn = mkButton(hudRoot,"⚔️ Technik (Q)",UDim2.new(0,154,0,52),UDim2.new(0.5,200,1,-90),C.bg3,Vector2.new(0,1))
+techBtn.TextSize = 13
+
+-- Buff-Statuszeile (unter dem Realm-Panel).
+local buffPanel = mkPanel("BuffPanel", UDim2.new(0,300,0,30), UDim2.new(0,14,0,164), Vector2.new(0,0), hudRoot)
+local buffLabel = mkLabel(buffPanel,"Keine aktiven Buffs",UDim2.new(1,-16,1,0),UDim2.fromOffset(10,0),C.t3,11,Enum.Font.GothamBold)
+buffLabel.TextYAlignment = Enum.TextYAlignment.Center
+
+-- Technik-Name aus Dao ableiten (zusätzlicher Listener auf DaoAffinity).
+bindAttr("DaoAffinity", function(v)
+	local t = v and TechniqueData.GetForDao(v)
+	techBtn.Text = t and (t.icon .. " " .. t.name .. "  (Q)") or "⚔️ Technik (Q)"
+end)
+
+-- ════════════════════════════════════════════════════════════
+-- ── Overlay-Verwaltung ──────────────────────────────────────
+-- ════════════════════════════════════════════════════════════
+local function closeAllOverlays()
+	mainMenuLayer.Visible  = false
+	inventoryLayer.Visible = false
+	shopLayer.Visible      = false
+	questLayer.Visible     = false
+end
+
+local function toggleOverlay(layer: Frame)
+	local wasOpen = layer.Visible
+	closeAllOverlays()
+	layer.Visible = not wasOpen
+end
+
+shopBtn.MouseButton1Click:Connect(function()  toggleOverlay(shopLayer)  end)
+questBtn.MouseButton1Click:Connect(function() toggleOverlay(questLayer) end)
+
+-- ════════════════════════════════════════════════════════════
+-- ── SHOP-Overlay ────────────────────────────────────────────
+-- ════════════════════════════════════════════════════════════
+local shopCard = mkPanel("ShopCard",UDim2.new(0,580,0,470),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), shopLayer)
+mkLabel(shopCard,"🏪  SHOP — Pillen & Elixiere",UDim2.new(1,-160,0,24),UDim2.fromOffset(16,14),C.gold,18,Enum.Font.GothamBold)
+local shopStonesL = mkLabel(shopCard,"💰 0",UDim2.new(0,120,0,22),UDim2.new(1,-150,0,16),C.gold,15,Enum.Font.GothamBold,Enum.TextXAlignment.Right)
+local closeShop = mkButton(shopCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
+closeShop.MouseButton1Click:Connect(function() shopLayer.Visible = false end)
+
+local shopScroll = Instance.new("ScrollingFrame")
+shopScroll.Size = UDim2.new(1,-20,1,-58); shopScroll.Position = UDim2.fromOffset(10,50)
+shopScroll.BackgroundTransparency = 1; shopScroll.BorderSizePixel = 0
+shopScroll.ScrollBarThickness = 5; shopScroll.ScrollBarImageColor3 = C.bg5
+shopScroll.CanvasSize = UDim2.new(); shopScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+shopScroll.Parent = shopCard
+local shopLayout = Instance.new("UIListLayout")
+shopLayout.SortOrder = Enum.SortOrder.LayoutOrder; shopLayout.Padding = UDim.new(0,6)
+shopLayout.Parent = shopScroll
+
+local buyRemote = Net.Event("BuyItem")
+for i, item in ipairs(ShopData.ITEMS) do
+	local row = Instance.new("Frame")
+	row.LayoutOrder = i; row.Size = UDim2.new(1,0,0,64)
+	row.BackgroundColor3 = C.bg3; row.BorderSizePixel = 0
+	corner(row,8); stroke(row,C.border); row.Parent = shopScroll
+
+	local col = RARITY[item.rarity] or C.t1
+	mkLabel(row, item.icon .. "  " .. item.name, UDim2.new(1,-120,0,20), UDim2.fromOffset(12,8), col, 15, Enum.Font.GothamBold)
+	local d = mkLabel(row, item.desc, UDim2.new(1,-120,0,28), UDim2.fromOffset(12,28), C.t2, 11)
+	d.TextWrapped = true
+
+	local buy = mkButton(row, ("💰 %d"):format(item.price), UDim2.new(0,96,0,40), UDim2.new(1,-108,0.5,-20), C.a1)
+	buy.TextSize = 13
+	buy.MouseButton1Click:Connect(function()
+		buyRemote:FireServer(item.id)
+	end)
+end
+
+-- ════════════════════════════════════════════════════════════
+-- ── QUEST-Overlay ───────────────────────────────────────────
+-- ════════════════════════════════════════════════════════════
+local questCard = mkPanel("QuestCard",UDim2.new(0,580,0,470),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), questLayer)
+mkLabel(questCard,"📜  QUESTS",UDim2.new(1,-60,0,24),UDim2.fromOffset(16,14),C.gold,18,Enum.Font.GothamBold)
+local closeQuest = mkButton(questCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
+closeQuest.MouseButton1Click:Connect(function() questLayer.Visible = false end)
+
+local questScroll = Instance.new("ScrollingFrame")
+questScroll.Size = UDim2.new(1,-20,1,-58); questScroll.Position = UDim2.fromOffset(10,50)
+questScroll.BackgroundTransparency = 1; questScroll.BorderSizePixel = 0
+questScroll.ScrollBarThickness = 5; questScroll.ScrollBarImageColor3 = C.bg5
+questScroll.CanvasSize = UDim2.new(); questScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+questScroll.Parent = questCard
+local questLayout = Instance.new("UIListLayout")
+questLayout.SortOrder = Enum.SortOrder.LayoutOrder; questLayout.Padding = UDim.new(0,6)
+questLayout.Parent = questScroll
+
+local claimRemote = Net.Event("ClaimQuest")
+-- Quest-Zeilen einmal bauen, später nur Werte aktualisieren.
+local questRows: { [string]: { progress: TextLabel, claim: TextButton } } = {}
+for i, q in ipairs(QuestData.QUESTS) do
+	local row = Instance.new("Frame")
+	row.LayoutOrder = i; row.Size = UDim2.new(1,0,0,68)
+	row.BackgroundColor3 = C.bg3; row.BorderSizePixel = 0
+	corner(row,8); stroke(row,C.border); row.Parent = questScroll
+
+	-- Belohnungs-Text
+	local rewardBits = {}
+	if q.stones and q.stones > 0 then table.insert(rewardBits, ("%d Stones"):format(q.stones)) end
+	if q.expFactor then table.insert(rewardBits, "EXP") end
+	if q.rewardItem then
+		local it = ShopData.GetItem(q.rewardItem)
+		table.insert(rewardBits, it and it.name or "Item")
+	end
+
+	mkLabel(row, q.name, UDim2.new(1,-130,0,18), UDim2.fromOffset(12,7), C.t1, 14, Enum.Font.GothamBold)
+	local desc = mkLabel(row, q.desc, UDim2.new(1,-130,0,24), UDim2.fromOffset(12,26), C.t2, 11)
+	desc.TextWrapped = true
+	mkLabel(row, "🎁 " .. table.concat(rewardBits, " · "), UDim2.new(1,-130,0,14), UDim2.fromOffset(12,50), C.gold, 10)
+
+	local progress = mkLabel(row, "0/0", UDim2.new(0,110,0,16), UDim2.new(1,-122,0,8), C.t3, 11, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+	local claim = mkButton(row, "—", UDim2.new(0,110,0,32), UDim2.new(1,-122,0,28), C.bg4)
+	claim.TextSize = 12
+	claim.MouseButton1Click:Connect(function()
+		claimRemote:FireServer(q.id)
+	end)
+
+	questRows[q.id] = { progress = progress, claim = claim }
+end
+
+Net.Event("QuestSync").OnClientEvent:Connect(function(state: any)
+	local anyClaimable = false
+	for questId, info in pairs(state) do
+		local row = questRows[questId]
+		if row then
+			row.progress.Text = ("%d/%d"):format(math.min(info.progress, info.target), info.target)
+			if info.claimed then
+				row.claim.Text = "✓ Belohnt"
+				row.claim.BackgroundColor3 = C.bg5
+				row.claim.Active = false
+			elseif info.complete then
+				row.claim.Text = "🎁 Beanspruchen"
+				row.claim.BackgroundColor3 = C.green
+				row.claim.Active = true
+				anyClaimable = true
+			else
+				row.claim.Text = "In Arbeit"
+				row.claim.BackgroundColor3 = C.bg4
+				row.claim.Active = false
+			end
+		end
+	end
+	questDot.Visible = anyClaimable
+end)
+
+-- ════════════════════════════════════════════════════════════
+-- ── INVENTAR-Befüllung (InventorySync) ──────────────────────
+-- ════════════════════════════════════════════════════════════
+local useRemote = Net.Event("UseItem")
+local function rebuildInventory(inv: any)
+	for _, child in ipairs(invScroll:GetChildren()) do
+		if child:IsA("Frame") then child:Destroy() end
+	end
+	local count = 0
+	local order = 0
+	for itemId, n in pairs(inv) do
+		if n and n > 0 then
+			local item = ShopData.GetItem(itemId)
+			if item then
+				count += 1; order += 1
+				local row = Instance.new("Frame")
+				row.LayoutOrder = order; row.Size = UDim2.new(1,0,0,56)
+				row.BackgroundColor3 = C.bg3; row.BorderSizePixel = 0
+				corner(row,8); stroke(row,C.border); row.Parent = invScroll
+
+				local col = RARITY[item.rarity] or C.t1
+				mkLabel(row, ("%s  %s  ×%d"):format(item.icon, item.name, n), UDim2.new(1,-120,0,18), UDim2.fromOffset(12,8), col, 14, Enum.Font.GothamBold)
+				local d = mkLabel(row, item.desc, UDim2.new(1,-120,0,20), UDim2.fromOffset(12,28), C.t2, 11)
+				d.TextWrapped = true
+
+				local use = mkButton(row, "Verwenden", UDim2.new(0,100,0,36), UDim2.new(1,-112,0.5,-18), C.green)
+				use.TextSize = 12
+				use.MouseButton1Click:Connect(function()
+					useRemote:FireServer(itemId)
+				end)
+			end
+		end
+	end
+	invEmpty.Visible = (count == 0)
+end
+
+Net.Event("InventorySync").OnClientEvent:Connect(rebuildInventory)
+
+-- Kauf-/Nutzungs-Feedback (Fehlermeldungen; Erfolg kommt via Notify).
+buyRemote.OnClientEvent:Connect(function(ok: boolean, msg: string)
+	if not ok then showToast("❌ " .. tostring(msg), "warn") end
+end)
+useRemote.OnClientEvent:Connect(function(ok: boolean, msg: string)
+	if not ok then showToast("❌ " .. tostring(msg), "warn") end
+end)
+
+-- Shop-Stones-Anzeige aktuell halten.
+bindAttr("SpiritStones", function(v) shopStonesL.Text = "💰 " .. fmt(v) end)
+
+-- ════════════════════════════════════════════════════════════
+-- ── TECHNIK (aktive Dao-Fähigkeit) ──────────────────────────
+-- ════════════════════════════════════════════════════════════
+local useTechRemote = Net.Event("UseTechnique")
+local function tryUseTechnique()
+	if player:GetAttribute("InMenu") or player:GetAttribute("InSeclusion") then return end
+	useTechRemote:FireServer()
+end
+techBtn.MouseButton1Click:Connect(tryUseTechnique)
+
+Net.Event("TechniqueUsed").OnClientEvent:Connect(function(name: string, icon: string)
+	showToast(("%s %s eingesetzt!"):format(icon, name), "info")
+end)
+
+-- ── Tastatur: Q = Technik ──────────────────────────────────
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	if input.KeyCode == Enum.KeyCode.Q then
+		tryUseTechnique()
+	elseif input.KeyCode == Enum.KeyCode.Escape then
+		closeAllOverlays()
+	end
+end)
+
+-- ════════════════════════════════════════════════════════════
+-- ── Sekündlicher Tick: Technik-Cooldown + Buff-Anzeige ──────
+-- ════════════════════════════════════════════════════════════
+task.spawn(function()
+	while true do
+		task.wait(0.25)
+
+		-- Technik-Cooldown
+		local cdUntil = player:GetAttribute("TechCooldownUntil") or 0
+		local remaining = cdUntil - os.time()
+		local dao = player:GetAttribute("DaoAffinity")
+		local tech = dao and TechniqueData.GetForDao(dao)
+		if remaining > 0 then
+			techBtn.Text = ("⏳ %ds"):format(math.ceil(remaining))
+			techBtn.BackgroundColor3 = C.bg5
+		else
+			techBtn.Text = tech and (tech.icon .. " " .. tech.name .. "  (Q)") or "⚔️ Technik (Q)"
+			techBtn.BackgroundColor3 = C.bg3
+		end
+
+		-- Buff-Anzeige
+		local expR = Buffs.Remaining(player, "Exp")
+		local dmgR = Buffs.Remaining(player, "Dmg")
+		local parts = {}
+		if expR > 0 then
+			table.insert(parts, ("🌀 EXP ×%.1f %s"):format(player:GetAttribute("ExpBuffMult") or 1, formatTime(expR)))
+		end
+		if dmgR > 0 then
+			table.insert(parts, ("🔴 DMG ×%.1f %s"):format(player:GetAttribute("DmgBuffMult") or 1, formatTime(dmgR)))
+		end
+		if #parts > 0 then
+			buffLabel.Text = table.concat(parts, "   ")
+			buffLabel.TextColor3 = C.cyan
+			buffPanel.Visible = true
+		else
+			buffLabel.Text = "Keine aktiven Buffs"
+			buffLabel.TextColor3 = C.t3
+			buffPanel.Visible = true
+		end
+	end
+end)
+
+print("[TTP] UIController geladen — Shop, Quests, Technik, Inventar aktiv.")

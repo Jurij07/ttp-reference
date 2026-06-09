@@ -10,7 +10,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local GameData = ReplicatedStorage:WaitForChild("GameData")
 local CultivationData = require(GameData:WaitForChild("CultivationData"))
-local Net = require(ReplicatedStorage:WaitForChild("Net"))
+local Net   = require(ReplicatedStorage:WaitForChild("Net"))
+local Buffs = require(ReplicatedStorage:WaitForChild("Buffs"))
 
 local DataManager       = require(script.Parent.DataManager)
 local ProvidenceService = require(script.Parent.ProvidenceService)
@@ -117,7 +118,8 @@ function CultivationService.AddEXP(player: Player, baseAmount: number)
 	local profile = DataManager.Get(player)
 	if not profile then return end
 
-	local mult = ProvidenceService.GetMultipliers(player).exp
+	-- EXP-Multiplikator aus Providence × aktiver EXP-Buff (Pillen).
+	local mult = ProvidenceService.GetMultipliers(player).exp * Buffs.GetMult(player, "Exp")
 	profile.exp += baseAmount * mult
 
 	local needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
@@ -150,6 +152,9 @@ function CultivationService.AddEXP(player: Player, baseAmount: number)
 				("⚡ REALM-DURCHBRUCH! %s erreicht!"):format(newRealm and newRealm.name or "?"),
 				"gold")
 			CultivationService.RecomputeStats(player)
+			-- Quest-Meldung: Realm erreicht
+			local QuestService = require(script.Parent.QuestService)
+			QuestService.Report(player, "realm", profile.realm)
 			needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
 
 		else

@@ -1,7 +1,9 @@
 --!strict
 -- CombatService.lua
 -- Server-autoritatives Kampfsystem.
--- Neu: Angriffs-Cooldown (Config.ATTACK_COOLDOWN), Boss-Kill → Realm-Durchbruch.
+-- DealDamage() ist die zentrale Schadensfunktion (genutzt von Klick-Angriff
+-- UND von Dao-Techniken). Angriffs-Cooldown, DMG-Buff, Mutation-Belohnung,
+-- Boss-Kill → Realm-Durchbruch, Quest-Meldungen.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -9,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local Net    = require(ReplicatedStorage:WaitForChild("Net"))
+local Buffs  = require(ReplicatedStorage:WaitForChild("Buffs"))
 
 local DataManager        = require(script.Parent.DataManager)
 local CultivationService = require(script.Parent.CultivationService)
@@ -18,19 +21,18 @@ local CombatService = {}
 local notifyEvent = Net.Event("Notify")
 local hitEvent    = Net.Event("CombatHit")
 
--- Letzter Angriffs-Zeitstempel je Spieler (für Cooldown)
 local lastAttack: { [number]: number } = {}
 local NPC_COUNTER_COOLDOWN = 1.2
 
 -- ── NPC-Gegenangriff ───────────────────────────────────────
-local function npcCounterattack(player: Player, model: Model)
+function CombatService.NpcCounterattack(player: Player, model: Model)
 	local now = os.clock()
 	if now - (model:GetAttribute("LastCounter") or 0) < NPC_COUNTER_COOLDOWN then return end
 	model:SetAttribute("LastCounter", now)
 
-	local npcDmg   = model:GetAttribute("Damage")   or 0
+	local npcDmg    = model:GetAttribute("Damage")   or 0
 	local playerDef = player:GetAttribute("Defense") or 0
-	local applied  = math.max(npcDmg - playerDef, 1)
+	local applied   = math.max(npcDmg - playerDef, 1)
 
 	local hp = (player:GetAttribute("HP") or 0) - applied
 	if hp <= 0 then
@@ -47,7 +49,7 @@ local function npcCounterattack(player: Player, model: Model)
 	end
 end
 
--- ── Kill-Belohnung + Boss-Kill-Behandlung ──────────────────
+-- ── Kill-Belohnung + Boss/Quest-Behandlung ────────────────
 local function rewardKill(player: Player, model: Model)
 	local exp    = model:GetAttribute("EXP")    or 0
 	local stones = model:GetAttribute("Stones") or 0
@@ -56,20 +58,59 @@ local function rewardKill(player: Player, model: Model)
 	CultivationService.AddKill(player)
 
 	local name = model:GetAttribute("NPCName") or model.Name
-	notifyEvent:FireClient(player, ("⚔️ %s besiegt! +%d EXP, +%d Stones"):format(name, exp, stones), "good")
+	local mutTag = model:GetAttribute("Mutated") and " ✨MUTIERT✨" or ""
+	notifyEvent:FireClient(player, ("⚔️ %s%s besiegt! +%d EXP, +%d Stones"):format(name, mutTag, exp, stones), "good")
 
-	-- Boss-Kill → Durchbruch freischalten
+	-- Quest-Meldung: Kill (+ Boss)
+	local QuestService = require(script.Parent.QuestService)
+	QuestService.Report(player, "kills", 1)
+
 	if model:GetAttribute("Boss") == true then
 		local realmId = model:GetAttribute("RealmId") or 0
 		if realmId > 0 then
 			CultivationService.OnBossKilled(player, realmId)
 		end
+		QuestService.Report(player, "boss", 1)
 	end
 end
 
--- ── Spieler greift NPC an ──────────────────────────────────
+-- ── Zentrale Schadensfunktion ──────────────────────────────
+-- rawDamage: bereits berechneter Roh-Schaden (vor NPC-Verteidigung).
+-- triggerCounter: ob der NPC zurückschlagen darf.
+function CombatService.DealDamage(player: Player, model: Model, rawDamage: number, triggerCounter: boolean): boolean
+	local hum = model:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then return false end
+
+	local npcDef  = model:GetAttribute("Defense") or 0
+	local applied = math.max(math.floor(rawDamage) - npcDef, 1)
+
+	hum.Health = math.max(hum.Health - applied, 0)
+	hitEvent:FireClient(player, model:GetAttribute("NPCName") or model.Name, applied)
+
+	if hum.Health <= 0 then
+		rewardKill(player, model)
+		return true
+	elseif triggerCounter then
+		CombatService.NpcCounterattack(player, model)
+	end
+	return false
+end
+
+-- Prüft, ob der Spieler den NPC angreifen darf (Reichweite/Status).
+function CombatService.CanAttack(player: Player, model: Model): boolean
+	if player:GetAttribute("InMenu") or player:GetAttribute("InSeclusion") then return false end
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	local prim = model.PrimaryPart
+	if root and prim and (root.Position - prim.Position).Magnitude > Config.ATTACK_RANGE + Config.ATTACK_RANGE_BUFFER then
+		return false
+	end
+	return true
+end
+
+-- ── Klick-Angriff ──────────────────────────────────────────
 function CombatService.PlayerAttackNPC(player: Player, model: Model)
-	if player:GetAttribute("InMenu") or player:GetAttribute("InSeclusion") then return end
+	if not CombatService.CanAttack(player, model) then return end
 
 	-- Angriffs-Cooldown
 	local now = os.clock()
@@ -77,34 +118,12 @@ function CombatService.PlayerAttackNPC(player: Player, model: Model)
 	if now - (lastAttack[uid] or 0) < Config.ATTACK_COOLDOWN then return end
 	lastAttack[uid] = now
 
-	local hum = model:FindFirstChildOfClass("Humanoid")
-	if not hum or hum.Health <= 0 then return end
-
-	-- Distanz-Check (Anti-Cheat)
-	local char = player.Character
-	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
-	local prim = model.PrimaryPart
-	if root and prim and (root.Position - prim.Position).Magnitude > Config.ATTACK_RANGE + Config.ATTACK_RANGE_BUFFER then
-		return
-	end
-
-	local dmg    = player:GetAttribute("Damage")  or 10
-	local npcDef = model:GetAttribute("Defense")  or 0
-	local applied = math.max(dmg - npcDef, 1)
-
-	hum.Health = math.max(hum.Health - applied, 0)
-	hitEvent:FireClient(player, model:GetAttribute("NPCName") or model.Name, applied)
-
-	if hum.Health <= 0 then
-		rewardKill(player, model)
-	else
-		npcCounterattack(player, model)
-	end
+	-- Basisangriff × aktiver DMG-Buff
+	local dmg = (player:GetAttribute("Damage") or 10) * Buffs.GetMult(player, "Dmg")
+	CombatService.DealDamage(player, model, dmg, true)
 end
 
--- ── Service-Start ──────────────────────────────────────────
 function CombatService.Start()
-	-- Cleanup beim Verlassen
 	Players.PlayerRemoving:Connect(function(player)
 		lastAttack[player.UserId] = nil
 	end)

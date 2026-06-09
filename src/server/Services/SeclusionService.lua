@@ -61,6 +61,9 @@ local function finishSeclusion(player: Player, years: number)
 		("☯️ Klausur abgeschlossen! +%d Jahre, +EXP, +%d Stones."):format(years, stonesGained or 0),
 		"gold"
 	)
+	-- Quest-Meldung: Klausur abgeschlossen
+	local QuestService = require(script.Parent.QuestService)
+	QuestService.Report(player, "seclusion", 1)
 end
 
 -- ── Klausur starten ────────────────────────────────────────

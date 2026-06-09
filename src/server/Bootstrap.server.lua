@@ -2,18 +2,26 @@
 -- Bootstrap.server.lua
 -- Einstiegspunkt des Servers. Services in korrekter Reihenfolge starten.
 
-local DataManager       = require(script.Parent.Services.DataManager)
-local ProvidenceService = require(script.Parent.Services.ProvidenceService)
-local CultivationService = require(script.Parent.Services.CultivationService)
-local SeclusionService  = require(script.Parent.Services.SeclusionService)
-local CombatService     = require(script.Parent.Services.CombatService)
-local NPCService        = require(script.Parent.Services.NPCService)
+local Services = script.Parent.Services
 
--- Listener zuerst verbinden, dann DataManager starten (der ProfileLoaded auslöst)
+local DataManager       = require(Services.DataManager)
+local ProvidenceService = require(Services.ProvidenceService)
+local CultivationService = require(Services.CultivationService)
+local SeclusionService  = require(Services.SeclusionService)
+local CombatService     = require(Services.CombatService)
+local TechniqueService  = require(Services.TechniqueService)
+local ShopService       = require(Services.ShopService)
+local QuestService      = require(Services.QuestService)
+local NPCService        = require(Services.NPCService)
+
+-- Listener zuerst verbinden, dann DataManager starten (löst ProfileLoaded aus).
 ProvidenceService.Start()
 CultivationService.Start()
 SeclusionService.Start()
 CombatService.Start()
+TechniqueService.Start()
+ShopService.Start()
+QuestService.Start()
 NPCService.Start()
 
 DataManager.Start()

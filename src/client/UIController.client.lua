@@ -164,8 +164,9 @@ local stageL     = mkLabel(realmPanel,"Stage 1 / 9",  UDim2.new(1,-20,0,16),UDim
 local expFill    = mkBar(realmPanel, C.exp, UDim2.new(0,12,0,56), 12)
 local expText    = mkLabel(realmPanel,"0 / 0 EXP",    UDim2.new(1,-20,0,14),UDim2.new(0,12,0,72),C.t3,11,nil,Enum.TextXAlignment.Center)
 local lifeL      = mkLabel(realmPanel,"⏳ Alter —",   UDim2.new(1,-20,0,14),UDim2.new(0,12,0,90),C.green,12)
-local dmgL       = mkLabel(realmPanel,"⚔️ DMG —",     UDim2.new(1,-20,0,14),UDim2.new(0,12,0,110),C.t3,11)
+local dmgL       = mkLabel(realmPanel,"⚔️ ATK —",     UDim2.new(1,-20,0,14),UDim2.new(0,12,0,110),C.t3,11)
 local defL       = mkLabel(realmPanel,"🛡️ DEF —",     UDim2.new(0.5,-16,0,14),UDim2.new(0.5,4,0,110),C.t3,11)
+-- ATK = Basisangriff; effektiver Schaden = ATK − NPC-Verteidigung (mindestens 1)
 
 -- ── Stats (oben rechts) ────────────────────────────────────
 local statPanel = mkPanel("StatPanel", UDim2.new(0,192,0,88), UDim2.new(1,-14,0,14), Vector2.new(1,0), hudRoot)
@@ -407,10 +408,16 @@ for _, c in ipairs(ProvidenceData.CONNATES) do
 end
 
 -- Dao-Tabelle
-infoRow("☯️  DAO AFFINITY — Dao-Neigung",C.gold,14,Enum.Font.GothamBold,10)
+infoRow("☯️  DAO AFFINITY — Dao-Neigung & Boni",C.gold,14,Enum.Font.GothamBold,10)
 for _, d in ipairs(ProvidenceData.DAO_DATA) do
 	infoRow(('<b><font color="#%s">%s Dao</font></b>  <font color="#5C6488">%s</font>'):format(d.color,d.name,d.desc), Color3.fromHex(d.color), 12)
+	infoRow('<font color="#34D399">✓ ' .. d.pros .. '</font>', C.green, 11)
+	if d.cons ~= "—" then
+		infoRow('<font color="#F87171">✗ ' .. d.cons .. '</font>', C.hp, 11)
+	end
 end
+-- Hinweis
+infoRow('<font color="#5C6488">ℹ️ ATK = Basiswert. Schaden = ATK − NPC-Verteidigung (mind. 1).</font>', C.t3, 11, nil, 10)
 
 -- ════════════════════════════════════════════════════════════
 -- ── Toasts (immer ganz oben)
@@ -484,8 +491,14 @@ bindAttr("Age",            updateAge)
 bindAttr("MaxLifespan",    updateAge)
 bindAttr("LifespanInfinite", updateAge)
 
-bindAttr("Damage",  function(v) dmgL.Text = ("⚔️ DMG %s"):format(fmt(v)) end)
+bindAttr("Damage",  function(v) dmgL.Text = ("⚔️ ATK %s"):format(fmt(v)) end)
 bindAttr("Defense", function(v) defL.Text = ("🛡️ DEF %s"):format(fmt(v)) end)
+-- BossRequired-Anzeige: blinkende Warnung wenn Boss besiegt werden muss
+local bossWarnLabel = mkLabel(realmPanel,"",UDim2.new(1,-20,0,14),UDim2.new(0,12,0,126),C.hp,10,Enum.Font.GothamBold)
+bossWarnLabel.TextWrapped = true
+bindAttr("BossRequired", function(v)
+	bossWarnLabel.Text = v and "⚠️ Boss besiegen für Realm-Durchbruch!" or ""
+end)
 
 bindAttr("SpiritStones", function(v) stonesL.Text = "💰 " .. fmt(v) end)
 bindAttr("Karma",        function(v) karmaL.Text  = "⚖️ Karma: " .. tostring(math.floor(v or 0)) end)

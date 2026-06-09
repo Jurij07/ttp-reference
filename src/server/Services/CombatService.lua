@@ -1,17 +1,16 @@
 --!strict
 -- CombatService.lua
--- Server-autoritatives Kampfsystem. Spieler klicken NPCs an (ClickDetector,
--- von NPCService gesetzt) → Schaden, Gegenangriff, Kill-Belohnung.
--- HP-Regeneration außerhalb des Kampfes.
+-- Server-autoritatives Kampfsystem.
+-- Neu: Angriffs-Cooldown (Config.ATTACK_COOLDOWN), Boss-Kill → Realm-Durchbruch.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
-local Net = require(ReplicatedStorage:WaitForChild("Net"))
+local Net    = require(ReplicatedStorage:WaitForChild("Net"))
 
-local DataManager       = require(script.Parent.DataManager)
+local DataManager        = require(script.Parent.DataManager)
 local CultivationService = require(script.Parent.CultivationService)
 
 local CombatService = {}
@@ -19,26 +18,27 @@ local CombatService = {}
 local notifyEvent = Net.Event("Notify")
 local hitEvent    = Net.Event("CombatHit")
 
-local NPC_COUNTERATTACK_COOLDOWN = 1.0
+-- Letzter Angriffs-Zeitstempel je Spieler (für Cooldown)
+local lastAttack: { [number]: number } = {}
+local NPC_COUNTER_COOLDOWN = 1.2
 
+-- ── NPC-Gegenangriff ───────────────────────────────────────
 local function npcCounterattack(player: Player, model: Model)
 	local now = os.clock()
-	local last = model:GetAttribute("LastCounter") or 0
-	if now - last < NPC_COUNTERATTACK_COOLDOWN then return end
+	if now - (model:GetAttribute("LastCounter") or 0) < NPC_COUNTER_COOLDOWN then return end
 	model:SetAttribute("LastCounter", now)
 
-	local npcDmg   = model:GetAttribute("Damage")  or 0
+	local npcDmg   = model:GetAttribute("Damage")   or 0
 	local playerDef = player:GetAttribute("Defense") or 0
 	local applied  = math.max(npcDmg - playerDef, 1)
 
 	local hp = (player:GetAttribute("HP") or 0) - applied
 	if hp <= 0 then
-		local maxHP = player:GetAttribute("MaxHP") or 1
-		player:SetAttribute("HP", maxHP)
+		player:SetAttribute("HP", player:GetAttribute("MaxHP") or 1)
 		local profile = DataManager.Get(player)
 		if profile then
 			local lost = math.floor(profile.spiritStones * 0.25)
-			profile.spiritStones -= lost
+			profile.spiritStones = math.max(0, profile.spiritStones - lost)
 			player:SetAttribute("SpiritStones", profile.spiritStones)
 			notifyEvent:FireClient(player, ("💀 Besiegt! %d Spirit Stones verloren."):format(lost), "warn")
 		end
@@ -47,20 +47,35 @@ local function npcCounterattack(player: Player, model: Model)
 	end
 end
 
+-- ── Kill-Belohnung + Boss-Kill-Behandlung ──────────────────
 local function rewardKill(player: Player, model: Model)
 	local exp    = model:GetAttribute("EXP")    or 0
-	local stones = model:GetAttribute("Stones")  or 0
+	local stones = model:GetAttribute("Stones") or 0
 	CultivationService.AddEXP(player, exp)
 	CultivationService.AddStones(player, stones)
 	CultivationService.AddKill(player)
 
 	local name = model:GetAttribute("NPCName") or model.Name
 	notifyEvent:FireClient(player, ("⚔️ %s besiegt! +%d EXP, +%d Stones"):format(name, exp, stones), "good")
+
+	-- Boss-Kill → Durchbruch freischalten
+	if model:GetAttribute("Boss") == true then
+		local realmId = model:GetAttribute("RealmId") or 0
+		if realmId > 0 then
+			CultivationService.OnBossKilled(player, realmId)
+		end
+	end
 end
 
+-- ── Spieler greift NPC an ──────────────────────────────────
 function CombatService.PlayerAttackNPC(player: Player, model: Model)
-	-- Im Menü oder in Klausur kein Angriff möglich
 	if player:GetAttribute("InMenu") or player:GetAttribute("InSeclusion") then return end
+
+	-- Angriffs-Cooldown
+	local now = os.clock()
+	local uid = player.UserId
+	if now - (lastAttack[uid] or 0) < Config.ATTACK_COOLDOWN then return end
+	lastAttack[uid] = now
 
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then return end
@@ -69,11 +84,12 @@ function CombatService.PlayerAttackNPC(player: Player, model: Model)
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local prim = model.PrimaryPart
-	local maxDist = Config.ATTACK_RANGE + Config.ATTACK_RANGE_BUFFER
-	if root and prim and (root.Position - prim.Position).Magnitude > maxDist then return end
+	if root and prim and (root.Position - prim.Position).Magnitude > Config.ATTACK_RANGE + Config.ATTACK_RANGE_BUFFER then
+		return
+	end
 
-	local dmg    = player:GetAttribute("Damage")   or 10
-	local npcDef = model:GetAttribute("Defense")   or 0
+	local dmg    = player:GetAttribute("Damage")  or 10
+	local npcDef = model:GetAttribute("Defense")  or 0
 	local applied = math.max(dmg - npcDef, 1)
 
 	hum.Health = math.max(hum.Health - applied, 0)
@@ -86,8 +102,14 @@ function CombatService.PlayerAttackNPC(player: Player, model: Model)
 	end
 end
 
+-- ── Service-Start ──────────────────────────────────────────
 function CombatService.Start()
-	-- Langsame HP-Regeneration (alle 0.5 s, +5 % MaxHP)
+	-- Cleanup beim Verlassen
+	Players.PlayerRemoving:Connect(function(player)
+		lastAttack[player.UserId] = nil
+	end)
+
+	-- HP-Regen alle 0.5 s (+5% MaxHP)
 	local accum = 0
 	RunService.Heartbeat:Connect(function(dt)
 		accum += dt

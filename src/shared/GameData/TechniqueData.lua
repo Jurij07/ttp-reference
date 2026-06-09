@@ -1,45 +1,46 @@
 --!strict
 -- TechniqueData.lua
--- Signatur-Technik pro Dao Affinity (aktive Kampffähigkeit, Taste Q).
--- Wird vom TechniqueService genutzt: trifft den nächsten Gegner in Reichweite,
--- verursacht (dmgMult × ATK) Schaden, danach (cooldown) Sekunden Abklingzeit.
--- Manche Techniken haben Zusatzeffekte (healFrac = heilt % der MaxHP).
+-- Active combat techniques (Q-key). One per Dao affinity + generics.
+-- dmgMult: multiplier on base ATK; cooldown in seconds; healFrac: fraction of damage healed.
 
 local TechniqueData = {}
 
 export type Technique = {
-	dao: string,
+	id: string,
 	name: string,
-	icon: string,
-	desc: string,
+	dao: string?,
 	dmgMult: number,
 	cooldown: number,
-	healFrac: number?,  -- optionaler Heileffekt (Anteil MaxHP)
-	color: string,
+	healFrac: number?,
+	desc: string,
 }
 
--- Schlüssel = Dao-Name (passend zu ProvidenceData.DAO_DATA).
-TechniqueData.BY_DAO = {
-	Sword   = { dao="Sword",   name="Schwert-Qi-Schnitt", icon="⚔️", dmgMult=3.0, cooldown=6, color="F87171",
-	            desc="Ein reiner Schwert-Qi-Hieb. 3× ATK." },
-	Fire    = { dao="Fire",    name="Inferno-Ausbruch",   icon="🔥", dmgMult=2.6, cooldown=7, color="FB923C",
-	            desc="Verbrennt den Feind in Flammen. 2.6× ATK." },
-	Void    = { dao="Void",    name="Leere-Verschlingung", icon="🌀", dmgMult=3.2, cooldown=8, color="A78BFA",
-	            desc="Reißt den Feind in die Leere. 3.2× ATK." },
-	Life    = { dao="Life",    name="Vitalitäts-Welle",   icon="🌿", dmgMult=1.6, cooldown=8, healFrac=0.35, color="34D399",
-	            desc="1.6× ATK Schaden + heilt 35% deiner MaxHP." },
-	Thunder = { dao="Thunder", name="Donnerschlag",       icon="⚡", dmgMult=2.8, cooldown=5, color="FBBF24",
-	            desc="Schneller Blitzschlag. 2.8× ATK, kurze Abklingzeit." },
-	Ice     = { dao="Ice",     name="Frost-Lanze",        icon="❄️", dmgMult=2.4, cooldown=6, color="67E8F9",
-	            desc="Durchbohrt mit Eis. 2.4× ATK." },
-	Earth   = { dao="Earth",   name="Bergzermalmung",     icon="🏔️", dmgMult=2.5, cooldown=7, color="A3E635",
-	            desc="Zermalmt mit der Wucht eines Berges. 2.5× ATK." },
-	Space   = { dao="Space",   name="Raum-Riss",          icon="🌌", dmgMult=3.0, cooldown=7, color="818CF8",
-	            desc="Zerschneidet den Raum selbst. 3.0× ATK." },
-} :: { [string]: Technique }
+TechniqueData.TECHNIQUES = {
+	{ id = "basic_strike",      name = "Basic Strike",         dao = nil,       dmgMult = 1.2, cooldown = 3,  desc = "A simple strike using condensed Qi." },
+	{ id = "sword_strike",      name = "Sword Qi Slash",       dao = "Sword",   dmgMult = 3.0, cooldown = 6,  desc = "A razor-sharp Sword Qi slash." },
+	{ id = "fire_burst",        name = "Flame Eruption",       dao = "Fire",    dmgMult = 2.5, cooldown = 7,  desc = "Erupt with scorching flame Qi." },
+	{ id = "void_strike",       name = "Void Collapse",        dao = "Void",    dmgMult = 2.8, cooldown = 8,  desc = "Collapse space around the target." },
+	{ id = "life_drain",        name = "Life Absorption",      dao = "Life",    dmgMult = 1.6, cooldown = 8,  healFrac = 0.35, desc = "Drain life from the target." },
+	{ id = "thunder_strike",    name = "Heaven's Wrath",       dao = "Thunder", dmgMult = 2.6, cooldown = 5,  desc = "Call down a bolt of heaven lightning." },
+	{ id = "ice_shard",         name = "Glacial Spear",        dao = "Ice",     dmgMult = 2.2, cooldown = 6,  desc = "Launch a piercing shard of glacial Qi." },
+	{ id = "earth_crash",       name = "Mountain Crash",       dao = "Earth",   dmgMult = 2.4, cooldown = 9,  desc = "Bring the weight of a mountain down." },
+	{ id = "space_rend",        name = "Dimensional Rend",     dao = "Space",   dmgMult = 3.2, cooldown = 10, desc = "Tear open a dimensional rift." },
+} :: { Technique }
+
+local _byId: {[string]: Technique} = {}
+for _, t in ipairs(TechniqueData.TECHNIQUES) do _byId[t.id] = t end
+
+local _byDao: {[string]: Technique} = {}
+for _, t in ipairs(TechniqueData.TECHNIQUES) do
+	if t.dao then _byDao[t.dao] = t end
+end
+
+function TechniqueData.Get(id: string): Technique?
+	return _byId[id]
+end
 
 function TechniqueData.GetForDao(dao: string): Technique?
-	return TechniqueData.BY_DAO[dao]
+	return _byDao[dao] or _byId["basic_strike"]
 end
 
 return TechniqueData

@@ -1,7 +1,6 @@
 --!strict
 -- CultivationService.lua
--- Realm/Stage/EXP, Combat-Stats, Alterung.
--- WICHTIG: Realm-Durchbruch erfordert Boss-Kill (profile.bossesKilled[realmId]).
+-- Realm/Stage/EXP, combat stats, lifespan aging.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,10 +9,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local GameData = ReplicatedStorage:WaitForChild("GameData")
 local CultivationData = require(GameData:WaitForChild("CultivationData"))
-local Net   = require(ReplicatedStorage:WaitForChild("Net"))
+local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local Buffs = require(ReplicatedStorage:WaitForChild("Buffs"))
 
-local DataManager       = require(script.Parent.DataManager)
+local DataManager = require(script.Parent.DataManager)
 local ProvidenceService = require(script.Parent.ProvidenceService)
 
 local CultivationService = {}
@@ -21,40 +20,34 @@ local CultivationService = {}
 local notifyEvent = Net.Event("Notify")
 local LIFESPAN_INF_SENTINEL = 1e15
 
--- ── Bewegung ───────────────────────────────────────────────
 local function updateMovement(player: Player)
 	local char = player.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid") :: Humanoid?
 	if not hum then return end
-	local frozen = player:GetAttribute("InMenu") == true
-		or player:GetAttribute("InSeclusion") == true
-	hum.WalkSpeed  = frozen and 0 or 16
-	hum.JumpPower  = frozen and 0 or 50
-	hum.JumpHeight = frozen and 0 or 7.2
-	hum.Sit        = player:GetAttribute("InSeclusion") == true
+	local inMenu      = player:GetAttribute("InMenu")      == true
+	local inSeclusion = player:GetAttribute("InSeclusion") == true
+	local frozen = inMenu or inSeclusion
+	hum.WalkSpeed  = frozen and 0  or 16
+	hum.JumpPower  = frozen and 0  or 50
+	hum.JumpHeight = frozen and 0  or 7.2
+	hum.Sit        = inSeclusion
 end
 
--- ── Attribute schreiben ────────────────────────────────────
 local function updateProgressAttributes(player: Player, profile: any)
 	local realm = CultivationData.GetRealm(profile.realm)
-	player:SetAttribute("Realm",        profile.realm)
-	player:SetAttribute("RealmName",    realm and realm.name or "?")
-	player:SetAttribute("Tier",         realm and realm.tier or "?")
-	player:SetAttribute("Stage",        profile.stage)
-	player:SetAttribute("MaxStage",     CultivationData.GetMaxStage(profile.realm))
-	player:SetAttribute("EXP",          profile.exp)
-	player:SetAttribute("EXPNeeded",    CultivationData.GetStageEXP(profile.realm, profile.stage))
+	player:SetAttribute("Realm",       profile.realm)
+	player:SetAttribute("RealmName",   realm and realm.name or "?")
+	player:SetAttribute("Tier",        realm and realm.tier or "?")
+	player:SetAttribute("Stage",       profile.stage)
+	player:SetAttribute("MaxStage",    CultivationData.GetMaxStage(profile.realm))
+	player:SetAttribute("EXP",         profile.exp)
+	player:SetAttribute("EXPNeeded",   CultivationData.GetStageEXP(profile.realm, profile.stage))
 	player:SetAttribute("SpiritStones", profile.spiritStones)
-	player:SetAttribute("Karma",        profile.karma)
-	player:SetAttribute("TotalKills",   profile.totalKills)
-	player:SetAttribute("Age",          math.floor(profile.age))
-	-- Boss-Status für HUD
-	local bossRequired = profile.stage >= CultivationData.GetMaxStage(profile.realm)
-		and not (profile.bossesKilled and profile.bossesKilled[profile.realm])
-	player:SetAttribute("BossRequired", bossRequired)
+	player:SetAttribute("Karma",       profile.karma)
+	player:SetAttribute("TotalKills",  profile.totalKills)
+	player:SetAttribute("Age",         math.floor(profile.age))
 end
 
--- ── Combat-Stats + Lebensspanne neu berechnen ──────────────
 function CultivationService.RecomputeStats(player: Player)
 	local profile = DataManager.Get(player)
 	if not profile then return end
@@ -62,35 +55,36 @@ function CultivationService.RecomputeStats(player: Player)
 	local baseHP, baseDmg, baseDef = CultivationData.GetCombatStats(profile.realm, profile.stage)
 	local m = ProvidenceService.GetMultipliers(player)
 
-	local maxHP = math.floor(baseHP * m.hp)
-	player:SetAttribute("MaxHP",    maxHP)
-	player:SetAttribute("HP",       maxHP)
-	player:SetAttribute("Damage",   math.floor(baseDmg * m.dmg))
-	player:SetAttribute("Defense",  math.floor(baseDef * m.def))
+	player:SetAttribute("MaxHP",   math.floor(baseHP  * m.hp))
+	player:SetAttribute("HP",      math.floor(baseHP  * m.hp))
+	player:SetAttribute("ATK",     math.floor(baseDmg * m.dmg))
+	player:SetAttribute("Defense", math.floor(baseDef * m.def))
 
-	local maxLife = CultivationData.GetLifespan(profile.realm) * m.lifespan
-	local infinite = maxLife == math.huge
+	local baseLife = CultivationData.GetLifespan(profile.realm)
+	local infinite = baseLife == math.huge
 	player:SetAttribute("LifespanInfinite", infinite)
-	if infinite then maxLife = LIFESPAN_INF_SENTINEL end
+	local maxLife = (infinite and LIFESPAN_INF_SENTINEL or baseLife * m.lifespan) + (profile.bonusLifespan or 0)
 	player:SetAttribute("MaxLifespan", maxLife)
 
 	updateProgressAttributes(player, profile)
 end
 
--- ── Gameplay starten ───────────────────────────────────────
 function CultivationService.BeginGameplay(player: Player)
 	CultivationService.RecomputeStats(player)
 	player:SetAttribute("InMenu", false)
 	updateMovement(player)
 	local realm = player:GetAttribute("RealmName") or "Qi Refinement"
 	notifyEvent:FireClient(player, ("☯️ Dein Weg beginnt — %s, Alter 18."):format(realm), "gold")
+	-- refresh quests on gameplay start
+	local QuestService = require(script.Parent.QuestService)
+	QuestService.Refresh(player)
 end
 
--- ── Player-Setup ───────────────────────────────────────────
 local function setupCharacter(player: Player)
 	player.CharacterAdded:Connect(function()
 		player:SetAttribute("InSeclusion", false)
-		task.wait(0.2); updateMovement(player)
+		task.wait(0.2)
+		updateMovement(player)
 	end)
 	player:GetAttributeChangedSignal("InSeclusion"):Connect(function() updateMovement(player) end)
 	player:GetAttributeChangedSignal("InMenu"):Connect(function() updateMovement(player) end)
@@ -106,6 +100,8 @@ local function initPlayer(player: Player)
 	if profile.providenceConfirmed then
 		CultivationService.RecomputeStats(player)
 		player:SetAttribute("InMenu", false)
+		local QuestService = require(script.Parent.QuestService)
+		QuestService.Refresh(player)
 	else
 		player:SetAttribute("InMenu", true)
 		updateProgressAttributes(player, profile)
@@ -113,96 +109,77 @@ local function initPlayer(player: Player)
 	end
 end
 
--- ── EXP hinzufügen — BOSS-KILL-PFLICHT für Realm-Wechsel ──
-function CultivationService.AddEXP(player: Player, baseAmount: number)
+-- isRaw=true skips Providence + Buff multipliers (for quest/item rewards)
+function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: boolean?)
 	local profile = DataManager.Get(player)
 	if not profile then return end
 
-	-- EXP-Multiplikator aus Providence × aktiver EXP-Buff (Pillen).
-	local mult = ProvidenceService.GetMultipliers(player).exp * Buffs.GetMult(player, "Exp")
-	profile.exp += baseAmount * mult
+	if isRaw then
+		profile.exp += baseAmount
+	else
+		local m = ProvidenceService.GetMultipliers(player)
+		local buffMult = Buffs.GetMult(player, "Exp")
+		profile.exp += baseAmount * m.exp * buffMult
+	end
 
 	local needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
 	while profile.exp >= needed do
 		local maxStage = CultivationData.GetMaxStage(profile.realm)
-
 		if profile.stage < maxStage then
-			-- Nächste Stage im gleichen Realm
-			profile.exp -= needed
-			profile.stage += 1
-			needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
-
-		elseif profile.realm < #CultivationData.REALMS then
-			-- Max-Stage erreicht — prüfe Boss-Kill-Pflicht
-			local bossKilled = profile.bossesKilled and profile.bossesKilled[profile.realm]
-			if not bossKilled then
-				-- EXP auf Maximum deckeln, warten auf Boss-Kill
-				profile.exp = needed
-				notifyEvent:FireClient(player,
-					"⚠️ Max-Stage erreicht! Besiege den Realm Guardian um den Durchbruch zu machen!",
-					"warn")
+			-- Boss-gate: freeze at last stage until boss is killed
+			if profile.stage == maxStage - 1 and not profile.bossesKilled[profile.realm] then
+				profile.exp = needed - 1
 				break
 			end
-			-- Boss besiegt → Realm-Durchbruch
+			profile.exp -= needed
+			profile.stage += 1
+		elseif profile.realm < #CultivationData.REALMS then
+			if not profile.bossesKilled[profile.realm] then
+				profile.exp = needed - 1
+				break
+			end
 			profile.exp -= needed
 			profile.realm += 1
-			profile.stage  = 1
-			local newRealm = CultivationData.GetRealm(profile.realm)
-			notifyEvent:FireClient(player,
-				("⚡ REALM-DURCHBRUCH! %s erreicht!"):format(newRealm and newRealm.name or "?"),
-				"gold")
+			profile.stage = 1
+			local realm = CultivationData.GetRealm(profile.realm)
+			notifyEvent:FireClient(player, ("⚡ DURCHBRUCH! %s erreicht!"):format(realm and realm.name or "?"), "gold")
 			CultivationService.RecomputeStats(player)
-			-- Quest-Meldung: Realm erreicht
 			local QuestService = require(script.Parent.QuestService)
-			QuestService.Report(player, "realm", profile.realm)
-			needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
-
+			QuestService.Refresh(player)
 		else
-			-- Letztes Realm — EXP einfrieren
-			profile.exp = needed
+			profile.exp = needed - 1
 			break
 		end
+		needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
 	end
 
 	updateProgressAttributes(player, profile)
 end
 
--- ── Nach Boss-Kill: Durchbruch ermöglichen ─────────────────
 function CultivationService.OnBossKilled(player: Player, realmId: number)
 	local profile = DataManager.Get(player)
 	if not profile then return end
-	if not profile.bossesKilled then profile.bossesKilled = {} end
 	profile.bossesKilled[realmId] = true
-	notifyEvent:FireClient(player,
-		("🏆 Realm Guardian besiegt! Durchbruch freigeschaltet!"),
-		"gold")
-	-- Versuche sofort Realm-Wechsel (falls EXP schon voll war)
-	local needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
-	if profile.exp >= needed then
-		CultivationService.AddEXP(player, 0)
-	end
-	updateProgressAttributes(player, profile)
+	CultivationService.AddEXP(player, 0)
 end
 
 function CultivationService.AddStones(player: Player, amount: number)
 	local profile = DataManager.Get(player)
 	if not profile then return end
-	profile.spiritStones += amount
+	profile.spiritStones = (profile.spiritStones or 0) + amount
 	player:SetAttribute("SpiritStones", profile.spiritStones)
 end
 
 function CultivationService.AddKill(player: Player)
 	local profile = DataManager.Get(player)
 	if not profile then return end
-	profile.totalKills += 1
+	profile.totalKills = (profile.totalKills or 0) + 1
 	player:SetAttribute("TotalKills", profile.totalKills)
 end
 
--- ── Service-Start ──────────────────────────────────────────
 function CultivationService.Start()
 	DataManager.ProfileLoaded:Connect(initPlayer)
 
-	-- Nur passives Altern im Heartbeat (kein Meditations-EXP)
 	RunService.Heartbeat:Connect(function(dt)
 		for _, player in ipairs(Players:GetPlayers()) do
 			local profile = DataManager.Get(player)
@@ -217,7 +194,7 @@ function CultivationService.Start()
 				if profile.age >= maxLife then
 					profile.age = Config.STARTING_AGE
 					profile.exp = 0
-					notifyEvent:FireClient(player, "☠️ Lebensspanne erschöpft — neues Leben (Alter 18).", "warn")
+					notifyEvent:FireClient(player, "☠️ Lebensspanne erschöpft — neues Leben beginnt (Alter 18).", "warn")
 					CultivationService.RecomputeStats(player)
 				end
 			end

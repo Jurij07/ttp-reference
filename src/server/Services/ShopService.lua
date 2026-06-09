@@ -1,16 +1,13 @@
 --!strict
 -- ShopService.lua
--- Kauf & Nutzung von Pillen/Elixieren. Gekaufte Items landen im Inventar
--- (profile.inventory[itemId] = Anzahl). Der Client erhält das Inventar über
--- das RemoteEvent "InventorySync". Effekte siehe ShopData.
+-- Buy items from the shop, use consumables from inventory.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GameData = ReplicatedStorage:WaitForChild("GameData")
-local ShopData = require(GameData:WaitForChild("ShopData"))
-local CultivationData = require(GameData:WaitForChild("CultivationData"))
-local Net    = require(ReplicatedStorage:WaitForChild("Net"))
-local Buffs  = require(ReplicatedStorage:WaitForChild("Buffs"))
+local ItemData = require(GameData:WaitForChild("ItemData"))
+local Net = require(ReplicatedStorage:WaitForChild("Net"))
+local Buffs = require(ReplicatedStorage:WaitForChild("Buffs"))
 
 local DataManager = require(script.Parent.DataManager)
 
@@ -19,126 +16,127 @@ local ShopService = {}
 local notifyEvent    = Net.Event("Notify")
 local inventorySync  = Net.Event("InventorySync")
 
-local function ensureInventory(profile: any)
-	if type(profile.inventory) ~= "table" then profile.inventory = {} end
-end
-
-local function sync(player: Player)
+local function syncInventory(player: Player)
 	local profile = DataManager.Get(player)
 	if not profile then return end
-	ensureInventory(profile)
 	inventorySync:FireClient(player, profile.inventory)
 end
-ShopService.Sync = sync
 
--- Fügt dem Inventar ein Item hinzu (z.B. Quest-Belohnung).
-function ShopService.GiveItem(player: Player, itemId: string, count: number)
+local function applyEffects(player: Player, item: any)
 	local profile = DataManager.Get(player)
 	if not profile then return end
-	ensureInventory(profile)
-	profile.inventory[itemId] = (profile.inventory[itemId] or 0) + count
-	sync(player)
+
+	for _, eff in ipairs(item.effects) do
+		local kind = eff.kind :: string
+		if kind == "heal_pct" then
+			local maxHP = (player:GetAttribute("MaxHP") or 100) :: number
+			local hp    = (player:GetAttribute("HP")    or 0)   :: number
+			local heal  = maxHP * (eff.value / 100)
+			player:SetAttribute("HP", math.min(maxHP, hp + heal))
+
+		elseif kind == "qi_pct" then
+			-- QI not yet implemented; ignore
+
+		elseif kind == "exp_flat" then
+			local CultivationService = require(script.Parent.CultivationService)
+			CultivationService.AddEXP(player, eff.value, true)
+
+		elseif kind == "stones" then
+			local CultivationService = require(script.Parent.CultivationService)
+			CultivationService.AddStones(player, eff.value)
+
+		elseif kind == "life" then
+			profile.bonusLifespan = (profile.bonusLifespan or 0) + eff.value
+			local CultivationService = require(script.Parent.CultivationService)
+			CultivationService.RecomputeStats(player)
+
+		elseif kind == "exp_buff" then
+			Buffs.Apply(player, "Exp", eff.mult, eff.duration)
+			notifyEvent:FireClient(player, ("⚡ EXP ×%.1f für %ds aktiv!"):format(eff.mult, eff.duration), "gold")
+
+		elseif kind == "dmg_pct" then
+			-- Permanent equipment bonus — not yet stacking; ignore for consumables
+		end
+	end
 end
 
--- Kauf eines Items (zieht Spirit Stones ab, legt es ins Inventar).
-function ShopService.Buy(player: Player, itemId: string): (boolean, string)
+-- Give item to player inventory (used by QuestService/admin)
+function ShopService.GiveItem(player: Player, itemId: number, count: number)
 	local profile = DataManager.Get(player)
-	if not profile then return false, "Kein Profil." end
-	if player:GetAttribute("InMenu") then return false, "Nicht im Startmenü." end
+	if not profile then return end
+	profile.inventory[itemId] = (profile.inventory[itemId] or 0) + (count or 1)
+	syncInventory(player)
+end
 
-	local item = ShopData.GetItem(itemId)
-	if not item then return false, "Unbekanntes Item." end
-	if profile.spiritStones < item.price then
-		return false, "Nicht genug Spirit Stones."
+function ShopService.Buy(player: Player, itemIdRaw: any)
+	local itemId = tonumber(itemIdRaw)
+	if not itemId then return end
+	local item = ItemData.GetItem(itemId)
+	if not item or not ItemData.IsBuyable(item) then
+		notifyEvent:FireClient(player, "Dieses Item ist nicht käuflich.", "warn")
+		return
 	end
 
-	profile.spiritStones -= item.price
+	local profile = DataManager.Get(player)
+	if not profile then return end
+
+	if profile.spiritStones < item.cost then
+		notifyEvent:FireClient(player, "Nicht genug Spirit Stones.", "warn")
+		return
+	end
+
+	local curStack = profile.inventory[itemId] or 0
+	if curStack >= item.stack then
+		notifyEvent:FireClient(player, "Stack voll.", "warn")
+		return
+	end
+
+	profile.spiritStones -= item.cost
+	profile.inventory[itemId] = curStack + 1
 	player:SetAttribute("SpiritStones", profile.spiritStones)
-	ShopService.GiveItem(player, itemId, 1)
-	notifyEvent:FireClient(player, ("🛒 %s gekauft (−%d Stones)."):format(item.name, item.price), "good")
-	return true, "OK"
+	notifyEvent:FireClient(player, ("Gekauft: %s"):format(item.name), "green")
+	syncInventory(player)
 end
 
--- Wendet den Effekt eines Items an.
-local function applyEffect(player: Player, item: any): (boolean, string)
-	local profile = DataManager.Get(player)
-	if not profile then return false, "Kein Profil." end
-	local CultivationService = require(script.Parent.CultivationService)
-
-	if item.effect == "exp_instant" then
-		local stageEXP = CultivationData.GetStageEXP(profile.realm, profile.stage)
-		CultivationService.AddEXP(player, stageEXP * (item.param or 1))
-		return true, ("⚡ %s: EXP erhalten!"):format(item.name)
-
-	elseif item.effect == "exp_fill" then
-		local needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
-		local missing = math.max(0, needed - profile.exp)
-		-- +1 EXP, damit die Stage sicher überschritten wird (Boss-Gate greift trotzdem).
-		CultivationService.AddEXP(player, missing + 1)
-		return true, ("⚡ %s: Stage aufgefüllt!"):format(item.name)
-
-	elseif item.effect == "buff_exp" then
-		Buffs.Apply(player, "Exp", item.mult or 2, item.duration or 300)
-		return true, ("🌀 %s aktiv: EXP ×%.1f"):format(item.name, item.mult or 2)
-
-	elseif item.effect == "buff_dmg" then
-		Buffs.Apply(player, "Dmg", item.mult or 2, item.duration or 180)
-		return true, ("🔴 %s aktiv: Schaden ×%.1f"):format(item.name, item.mult or 2)
-
-	elseif item.effect == "heal" then
-		player:SetAttribute("HP", player:GetAttribute("MaxHP") or 1)
-		return true, ("💊 %s: voll geheilt!"):format(item.name)
-
-	elseif item.effect == "age_reduce" then
-		-- Nicht unter das Startalter (18) verjüngen.
-		profile.age = math.max(18, profile.age - (item.param or 0))
-		player:SetAttribute("Age", math.floor(profile.age))
-		return true, ("🍃 %s: −%d Jahre!"):format(item.name, item.param or 0)
+function ShopService.Use(player: Player, itemIdRaw: any)
+	local itemId = tonumber(itemIdRaw)
+	if not itemId then return end
+	local item = ItemData.GetItem(itemId)
+	if not item or not ItemData.IsUsable(item) then
+		notifyEvent:FireClient(player, "Dieses Item kann nicht verwendet werden.", "warn")
+		return
 	end
 
-	return false, "Unbekannter Effekt."
-end
-
--- Item aus dem Inventar verwenden.
-function ShopService.Use(player: Player, itemId: string): (boolean, string)
 	local profile = DataManager.Get(player)
-	if not profile then return false, "Kein Profil." end
-	if player:GetAttribute("InMenu") then return false, "Nicht im Startmenü." end
-	if player:GetAttribute("InSeclusion") then return false, "Nicht während der Klausur." end
-	ensureInventory(profile)
+	if not profile then return end
+	if (profile.inventory[itemId] or 0) <= 0 then
+		notifyEvent:FireClient(player, "Kein Item im Inventar.", "warn")
+		return
+	end
 
-	local count = profile.inventory[itemId] or 0
-	if count <= 0 then return false, "Item nicht im Inventar." end
-
-	local item = ShopData.GetItem(itemId)
-	if not item then return false, "Unbekanntes Item." end
-
-	local ok, msg = applyEffect(player, item)
-	if not ok then return false, msg end
-
-	profile.inventory[itemId] = count - 1
+	profile.inventory[itemId] -= 1
 	if profile.inventory[itemId] <= 0 then profile.inventory[itemId] = nil end
-	sync(player)
-	notifyEvent:FireClient(player, msg, "good")
-	return true, "OK"
+	applyEffects(player, item)
+	notifyEvent:FireClient(player, ("Verwendet: %s"):format(item.name), "green")
+	syncInventory(player)
 end
 
 function ShopService.Start()
-	-- InventorySync wird bereits beim Modul-Laden erstellt (siehe oben).
-	DataManager.ProfileLoaded:Connect(function(player)
-		sync(player)
-	end)
-
 	local buyEvent = Net.Event("BuyItem")
+	local useEvent = Net.Event("UseItem")
+
 	buyEvent.OnServerEvent:Connect(function(player, itemId)
-		local ok, msg = ShopService.Buy(player, tostring(itemId))
-		buyEvent:FireClient(player, ok, msg)
+		ShopService.Buy(player, itemId)
+	end)
+	useEvent.OnServerEvent:Connect(function(player, itemId)
+		ShopService.Use(player, itemId)
 	end)
 
-	local useEvent = Net.Event("UseItem")
-	useEvent.OnServerEvent:Connect(function(player, itemId)
-		local ok, msg = ShopService.Use(player, tostring(itemId))
-		useEvent:FireClient(player, ok, msg)
+	-- Send inventory on join
+	local DataManager_ = DataManager
+	DataManager_.ProfileLoaded:Connect(function(player: Player)
+		task.wait(0.5)
+		syncInventory(player)
 	end)
 end
 

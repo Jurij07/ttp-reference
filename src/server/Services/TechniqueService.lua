@@ -1,107 +1,89 @@
 --!strict
 -- TechniqueService.lua
--- Aktive Dao-Technik (Taste Q / HUD-Button). Trifft den nächsten Gegner in
--- Reichweite, verursacht (dmgMult × ATK) Schaden, dann Abklingzeit.
--- Cooldown wird serverseitig validiert und als Attribut "TechCooldownUntil"
--- (os.clock-basiert) für die Client-Anzeige repliziert.
+-- Handles Q-key active technique use. Finds nearest NPC and applies the
+-- player's Dao technique (or Basic Strike as fallback).
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
+local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local GameData = ReplicatedStorage:WaitForChild("GameData")
 local TechniqueData = require(GameData:WaitForChild("TechniqueData"))
-local Net   = require(ReplicatedStorage:WaitForChild("Net"))
-local Buffs = require(ReplicatedStorage:WaitForChild("Buffs"))
 
-local DataManager   = require(script.Parent.DataManager)
 local CombatService = require(script.Parent.CombatService)
 
 local TechniqueService = {}
 
-local notifyEvent = Net.Event("Notify")
+local lastUse: {[number]: number} = {}
 
--- Letzter Technik-Einsatz je Spieler (os.clock).
-local lastUse: { [number]: number } = {}
-
--- Findet den nächsten lebenden NPC in Angriffsreichweite.
 local function nearestNPC(player: Player): Model?
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not root then return nil end
 
-	local npcFolder = workspace:FindFirstChild("NPCs")
-	if not npcFolder then return nil end
+	local folder = workspace:FindFirstChild("NPCs")
+	if not folder then return nil end
 
-	local maxDist = Config.ATTACK_RANGE + Config.ATTACK_RANGE_BUFFER
 	local best: Model? = nil
-	local bestDist = maxDist
+	local bestDist = Config.ATTACK_RANGE + Config.ATTACK_RANGE_BUFFER
 
-	for _, model in ipairs(npcFolder:GetChildren()) do
-		if model:IsA("Model") and model.PrimaryPart then
-			local hum = model:FindFirstChildOfClass("Humanoid")
-			if hum and hum.Health > 0 then
-				local d = (root.Position - model.PrimaryPart.Position).Magnitude
-				if d <= bestDist then
-					best = model
-					bestDist = d
-				end
+	for _, child in ipairs(folder:GetChildren()) do
+		local model = child :: Model
+		local prim = model.PrimaryPart
+		local hum = model:FindFirstChildOfClass("Humanoid")
+		if prim and hum and hum.Health > 0 then
+			local dist = (root.Position - prim.Position).Magnitude
+			if dist < bestDist then
+				bestDist = dist
+				best = model
 			end
 		end
 	end
 	return best
 end
 
-function TechniqueService.UseTechnique(player: Player)
+function TechniqueService.UseActive(player: Player)
 	if player:GetAttribute("InMenu") or player:GetAttribute("InSeclusion") then return end
 
-	local dao  = player:GetAttribute("DaoAffinity")
-	local tech = dao and TechniqueData.GetForDao(dao)
+	local uid = player.UserId
+	local now = os.clock()
+	local cooldownUntil = (player:GetAttribute("TechCooldownUntil") or 0) :: number
+	if os.time() < cooldownUntil then return end
+
+	local dao = (player:GetAttribute("DaoAffinity") or "") :: string
+	local tech = TechniqueData.GetForDao(dao) or TechniqueData.Get("basic_strike")
 	if not tech then return end
 
-	-- Cooldown prüfen
-	local now = os.clock()
-	if now < (lastUse[player.UserId] or 0) then
-		return -- noch in Abklingzeit
-	end
-
-	local target = nearestNPC(player)
-	if not target then
-		notifyEvent:FireClient(player, "🎯 Kein Gegner in Reichweite!", "warn")
-		return
-	end
-
-	-- Cooldown setzen + replizieren
-	lastUse[player.UserId] = now + tech.cooldown
-	player:SetAttribute("TechCooldown", tech.cooldown)
+	-- Per-player server-side cooldown
+	if now - (lastUse[uid] or 0) < tech.cooldown then return end
+	lastUse[uid] = now
 	player:SetAttribute("TechCooldownUntil", os.time() + tech.cooldown)
 
-	-- Schaden (× DMG-Buff)
-	local atk = (player:GetAttribute("Damage") or 10) * Buffs.GetMult(player, "Dmg")
-	local raw = atk * tech.dmgMult
-	CombatService.DealDamage(player, target, raw, true)
+	local target = nearestNPC(player)
+	if not target then return end
 
-	-- Heileffekt (z.B. Life-Dao)
+	local atk = (player:GetAttribute("ATK") or player:GetAttribute("Damage") or 10) :: number
+	local rawDmg = math.floor(atk * tech.dmgMult)
+
+	CombatService.DealDamage(player, target, rawDmg, false)
+
+	-- Healing technique
 	if tech.healFrac then
-		local maxHP = player:GetAttribute("MaxHP") or 1
-		local hp    = player:GetAttribute("HP") or maxHP
-		player:SetAttribute("HP", math.min(maxHP, hp + maxHP * tech.healFrac))
+		local heal = rawDmg * tech.healFrac
+		local maxHP = (player:GetAttribute("MaxHP") or 1) :: number
+		local hp    = (player:GetAttribute("HP")    or 0) :: number
+		player:SetAttribute("HP", math.min(maxHP, hp + heal))
 	end
 
-	-- Feedback an Client (für Effekt-Anzeige)
-	Net.Event("TechniqueUsed"):FireClient(player, tech.name, tech.icon)
+	Net.Event("TechniqueUsed"):FireClient(player, tech.name, tech.cooldown)
 end
 
 function TechniqueService.Start()
-	Net.Event("TechniqueUsed") -- pre-create
-
-	Players.PlayerRemoving:Connect(function(player)
-		lastUse[player.UserId] = nil
-	end)
-
+	Net.Event("TechniqueUsed") -- pre-create for client WaitForChild
 	local useEvent = Net.Event("UseTechnique")
 	useEvent.OnServerEvent:Connect(function(player)
-		TechniqueService.UseTechnique(player)
+		TechniqueService.UseActive(player)
 	end)
 end
 

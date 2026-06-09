@@ -25,20 +25,16 @@ local store: DataStore? = nil
 -- ── Standard-Profil für neue Spieler ───────────────────────
 local function defaultProfile(): any
 	return {
-		version = 1,
-		providence = nil, -- { aptitude, physique, connate, dao } — wird beim 1. Join gerollt
-		rerolls = {
-			aptitude = Config.FREE_REROLLS_PER_ATTRIBUTE,
-			physique = Config.FREE_REROLLS_PER_ATTRIBUTE,
-			connate = Config.FREE_REROLLS_PER_ATTRIBUTE,
-			dao = Config.FREE_REROLLS_PER_ATTRIBUTE,
-		},
+		version = 2,
+		providence = nil,            -- { aptitude, physique, connate, dao }
+		providenceConfirmed = false, -- erst nach Bestätigung im Start-Menü true
+		freeRerolls = Config.FREE_REROLLS,
 		realm = 1,
 		stage = 1,
 		exp = 0,
 		spiritStones = Config.STARTING_SPIRIT_STONES,
 		karma = Config.STARTING_KARMA,
-		lifespanUsed = 0, -- bereits vergangene Lebensjahre
+		age = Config.STARTING_AGE,   -- Spieler starten mit Alter 18
 		totalKills = 0,
 		inventory = {},
 		quests = {},
@@ -51,13 +47,6 @@ local function reconcile(profile: any)
 	for key, value in pairs(defaults) do
 		if profile[key] == nil then
 			profile[key] = value
-		end
-	end
-	if typeof(profile.rerolls) == "table" then
-		for key, value in pairs(defaults.rerolls) do
-			if profile.rerolls[key] == nil then
-				profile.rerolls[key] = value
-			end
 		end
 	end
 end

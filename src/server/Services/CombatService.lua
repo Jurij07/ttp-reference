@@ -66,16 +66,22 @@ end
 
 -- Wird vom ClickDetector aufgerufen, wenn ein Spieler einen NPC anklickt.
 function CombatService.PlayerAttackNPC(player: Player, model: Model)
+	-- Im Menü oder beim Meditieren kann nicht angegriffen werden.
+	if player:GetAttribute("InMenu") or player:GetAttribute("Meditating") then
+		return
+	end
+
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then
 		return -- schon tot
 	end
 
-	-- Distanz-Check (Anti-Cheat).
+	-- Distanz-Check (Nahkampf-Reichweite, Anti-Cheat).
 	local char = player.Character
 	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	local prim = model.PrimaryPart
-	if root and prim and (root.Position - prim.Position).Magnitude > Config.MAX_ATTACK_DISTANCE then
+	local maxDist = Config.ATTACK_RANGE + Config.ATTACK_RANGE_BUFFER
+	if root and prim and (root.Position - prim.Position).Magnitude > maxDist then
 		return
 	end
 

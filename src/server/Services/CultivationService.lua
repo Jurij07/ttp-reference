@@ -1,9 +1,13 @@
 --!strict
 -- CultivationService.lua
--- Das Herz des Spiels: verwaltet Realm/Stage/EXP, Meditation (passives Farmen),
--- Realm-Breakthroughs, abgeleitete Combat-Stats und die Lifespan-Alterung.
--- Spielerwerte werden als Attribute auf dem Player gespeichert und
--- replizieren dadurch automatisch zum Client (HUD).
+-- Das Herz des Spiels: Realm/Stage/EXP, Meditation, Realm-Breakthroughs,
+-- abgeleitete Combat-Stats und die Alterung (Lifespan, Start mit Alter 18).
+-- Spielerwerte liegen als Attribute auf dem Player und replizieren zum Client.
+--
+-- Zustände:
+--   InMenu      = true  → Spieler ist im Providence-Start-Menü (eingefroren,
+--                         keine Alterung, kein Combat, keine Meditation)
+--   Meditating  = true  → Spieler sitzt, farmt EXP, kann sich nicht bewegen/angreifen
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -23,7 +27,25 @@ local notifyEvent = Net.Event("Notify")
 
 local LIFESPAN_INF_SENTINEL = 1e15 -- Attribut-sicherer Ersatz für "unendlich"
 
--- Schreibt die "leichten" Fortschritts-Attribute (ändern sich oft).
+-- ── Bewegung / Sitzen ──────────────────────────────────────
+-- Friert den Charakter ein, wenn er im Menü ist oder meditiert (= sitzt).
+local function updateMovement(player: Player)
+	local char = player.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid") :: Humanoid?
+	if not hum then
+		return
+	end
+	local meditating = player:GetAttribute("Meditating") == true
+	local inMenu = player:GetAttribute("InMenu") == true
+	local frozen = meditating or inMenu
+
+	hum.WalkSpeed = frozen and 0 or 16
+	hum.JumpPower = frozen and 0 or 50
+	hum.JumpHeight = frozen and 0 or 7.2
+	hum.Sit = meditating -- beim Meditieren hinsetzen
+end
+
+-- ── Attribute schreiben ────────────────────────────────────
 local function updateProgressAttributes(player: Player, profile: any)
 	local realm = CultivationData.GetRealm(profile.realm)
 	player:SetAttribute("Realm", profile.realm)
@@ -36,10 +58,10 @@ local function updateProgressAttributes(player: Player, profile: any)
 	player:SetAttribute("SpiritStones", profile.spiritStones)
 	player:SetAttribute("Karma", profile.karma)
 	player:SetAttribute("TotalKills", profile.totalKills)
+	player:SetAttribute("Age", math.floor(profile.age))
 end
 
--- Berechnet MaxHP/Damage/Defense + Lifespan neu (nach Realm/Stage/Providence)
--- und heilt den Spieler voll. Bei Breakthroughs aufrufen.
+-- Berechnet MaxHP/Damage/Defense + Lifespan neu und heilt voll.
 function CultivationService.RecomputeStats(player: Player)
 	local profile = DataManager.Get(player)
 	if not profile then
@@ -55,34 +77,67 @@ function CultivationService.RecomputeStats(player: Player)
 	player:SetAttribute("Damage", math.floor(baseDmg * m.dmg))
 	player:SetAttribute("Defense", math.floor(baseDef * m.def))
 
-	-- Lifespan
 	local maxLife = CultivationData.GetLifespan(profile.realm)
 	local infinite = maxLife == math.huge
 	player:SetAttribute("LifespanInfinite", infinite)
 	if infinite then
 		maxLife = LIFESPAN_INF_SENTINEL
-		profile.lifespanUsed = 0
 	end
 	player:SetAttribute("MaxLifespan", maxLife)
-	player:SetAttribute("Lifespan", math.max(maxLife - profile.lifespanUsed, 0))
 
 	updateProgressAttributes(player, profile)
 end
 
--- Richtet einen Spieler beim Join ein.
+-- Startet das eigentliche Gameplay (nach Providence-Bestätigung).
+function CultivationService.BeginGameplay(player: Player)
+	CultivationService.RecomputeStats(player) -- erst Stats, dann HUD zeigen
+	player:SetAttribute("InMenu", false)
+	updateMovement(player)
+	local realm = player:GetAttribute("RealmName") or "Qi Refinement"
+	notifyEvent:FireClient(player, ("☯️ Dein Weg beginnt — %s, Alter 18."):format(realm), "gold")
+end
+
+-- ── Spieler-Setup beim Join ────────────────────────────────
+local function setupCharacter(player: Player)
+	player.CharacterAdded:Connect(function()
+		player:SetAttribute("Meditating", false)
+		task.wait(0.2) -- Humanoid kurz settlen lassen
+		updateMovement(player)
+	end)
+	player:GetAttributeChangedSignal("Meditating"):Connect(function()
+		updateMovement(player)
+	end)
+	player:GetAttributeChangedSignal("InMenu"):Connect(function()
+		updateMovement(player)
+	end)
+	if player.Character then
+		updateMovement(player)
+	end
+end
+
 local function initPlayer(player: Player)
 	local profile = DataManager.Get(player)
 	if not profile then
 		return
 	end
-	-- Providence sicherstellen, BEVOR die Stats berechnet werden.
+
 	ProvidenceService.EnsureRolled(player, profile)
 	player:SetAttribute("Meditating", false)
-	CultivationService.RecomputeStats(player)
+	setupCharacter(player)
+
+	if profile.providenceConfirmed then
+		-- Wiederkehrender Spieler: direkt ins Spiel.
+		CultivationService.RecomputeStats(player)
+		player:SetAttribute("InMenu", false)
+	else
+		-- Neuer Spieler: ins Providence-Start-Menü.
+		player:SetAttribute("InMenu", true)
+		updateProgressAttributes(player, profile)
+		updateMovement(player)
+	end
 end
 
--- Fügt EXP hinzu (baseAmount wird mit dem Providence-EXP-Multiplikator skaliert)
--- und behandelt Stage-Ups sowie Realm-Breakthroughs.
+-- ── EXP / Stages / Breakthrough ────────────────────────────
 function CultivationService.AddEXP(player: Player, baseAmount: number)
 	local profile = DataManager.Get(player)
 	if not profile then
@@ -99,7 +154,6 @@ function CultivationService.AddEXP(player: Player, baseAmount: number)
 			profile.exp -= needed
 			profile.stage += 1
 		elseif profile.realm < #CultivationData.REALMS then
-			-- Breakthrough in den nächsten Realm
 			profile.exp -= needed
 			profile.realm += 1
 			profile.stage = 1
@@ -107,7 +161,6 @@ function CultivationService.AddEXP(player: Player, baseAmount: number)
 			notifyEvent:FireClient(player, ("⚡ BREAKTHROUGH! %s erreicht!"):format(realm and realm.name or "?"), "gold")
 			CultivationService.RecomputeStats(player)
 		else
-			-- Maximaler Realm — EXP deckeln
 			profile.exp = needed
 			break
 		end
@@ -117,7 +170,6 @@ function CultivationService.AddEXP(player: Player, baseAmount: number)
 	updateProgressAttributes(player, profile)
 end
 
--- Vergibt Spirit Stones.
 function CultivationService.AddStones(player: Player, amount: number)
 	local profile = DataManager.Get(player)
 	if not profile then
@@ -136,26 +188,23 @@ function CultivationService.AddKill(player: Player)
 	player:SetAttribute("TotalKills", profile.totalKills)
 end
 
--- Meditation an/aus schalten.
-local function setMeditating(player: Player, on: boolean)
-	player:SetAttribute("Meditating", on)
-end
-
 function CultivationService.Start()
-	-- Spieler beim Laden ihres Profils einrichten.
 	DataManager.ProfileLoaded:Connect(initPlayer)
 
-	-- Meditate-Toggle vom Client.
+	-- Meditate-Toggle (im Menü blockiert).
 	local meditateEvent = Net.Event("ToggleMeditate")
 	meditateEvent.OnServerEvent:Connect(function(player, on)
-		setMeditating(player, on == true)
+		if player:GetAttribute("InMenu") then
+			return
+		end
+		player:SetAttribute("Meditating", on == true)
 	end)
 
-	-- Haupt-Loop: Meditation (EXP) + Lifespan-Alterung.
+	-- Haupt-Loop: Meditation (EXP) + Alterung.
 	RunService.Heartbeat:Connect(function(dt)
 		for _, player in ipairs(Players:GetPlayers()) do
 			local profile = DataManager.Get(player)
-			if not profile then
+			if not profile or player:GetAttribute("InMenu") then
 				continue
 			end
 
@@ -165,17 +214,16 @@ function CultivationService.Start()
 				CultivationService.AddEXP(player, needed * Config.MEDITATION_FRACTION_PER_SEC * dt)
 			end
 
-			-- Lifespan-Alterung
+			-- Alterung
 			if Config.LIFESPAN_ENABLED and not player:GetAttribute("LifespanInfinite") then
-				profile.lifespanUsed += Config.LIFESPAN_DECAY_PER_SEC * dt
+				profile.age += Config.LIFESPAN_DECAY_PER_SEC * dt
+				player:SetAttribute("Age", math.floor(profile.age))
 				local maxLife = player:GetAttribute("MaxLifespan") or 0
-				local remaining = math.max(maxLife - profile.lifespanUsed, 0)
-				player:SetAttribute("Lifespan", remaining)
-				if remaining <= 0 then
-					-- Tod durch Alter: neues Leben, sanfte Strafe (EXP der Stage verloren).
-					profile.lifespanUsed = 0
+				if profile.age >= maxLife then
+					-- Tod durch Alter: neues Leben (Alter 18), Stage-EXP verloren.
+					profile.age = Config.STARTING_AGE
 					profile.exp = 0
-					notifyEvent:FireClient(player, "☠️ Deine Lebensspanne ist erschöpft — ein neues Leben beginnt.", "warn")
+					notifyEvent:FireClient(player, "☠️ Deine Lebensspanne ist erschöpft — ein neues Leben beginnt (Alter 18).", "warn")
 					CultivationService.RecomputeStats(player)
 				end
 			end

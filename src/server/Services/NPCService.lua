@@ -130,9 +130,9 @@ function NPCService.SpawnNPC(realmId: number, data: any, position: Vector3)
 		end
 	end)
 
-	-- Klick = Angriff.
+	-- Klick = Angriff (nur in Nahkampf-Reichweite).
 	local click = Instance.new("ClickDetector")
-	click.MaxActivationDistance = Config.MAX_ATTACK_DISTANCE
+	click.MaxActivationDistance = Config.ATTACK_RANGE
 	click.Parent = body
 	click.MouseClick:Connect(function(player)
 		CombatService.PlayerAttackNPC(player, model)

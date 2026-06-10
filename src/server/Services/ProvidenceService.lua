@@ -42,7 +42,7 @@ function ProvidenceService.EnsureRolled(player: Player, profile: any)
 end
 
 -- ── Stat-Multiplikatoren (inkl. Dao-Boni) ─────────────────
-function ProvidenceService.GetMultipliers(player: Player): { hp: number, dmg: number, def: number, exp: number, lifespan: number }
+function ProvidenceService.GetMultipliers(player: Player): { hp: number, dmg: number, def: number, exp: number, lifespan: number, bonusLifespan: number? }
 	local profile = DataManager.Get(player)
 	local prov    = profile and profile.providence
 
@@ -86,12 +86,23 @@ function ProvidenceService.GetMultipliers(player: Player): { hp: number, dmg: nu
 	local aExp  = grade and grade.expMult      or (grade and grade.mult) or 1.0
 	local aLife = grade and grade.lifespanMult or 1.0
 
+	-- Companion / Formation / Title / Leaderboard-rank bonuses
+	local CompanionService   = require(script.Parent.CompanionService)
+	local FormationService    = require(script.Parent.FormationService)
+	local TitleService        = require(script.Parent.TitleService)
+	local LeaderboardService  = require(script.Parent.LeaderboardService)
+	local comp = CompanionService.GetActiveBonus(player)
+	local form = FormationService.GetActiveBonus(player)
+	local titl = TitleService.GetActiveBonus(player)
+	local rank = LeaderboardService.GetRankBonus(player)
+
 	return {
-		hp  = (physique and physique.hpMult  or 1.0) * statBonus * (daoEntry and daoEntry.hpMult  or 1.0) * eHp  * sHp  * aHp,
-		dmg = (physique and physique.dmgMult or 1.0) * statBonus * (daoEntry and daoEntry.dmgMult or 1.0) * eDmg * sDmg * aDmg,
-		def = (physique and physique.defMult or 1.0) * statBonus * (daoEntry and daoEntry.defMult or 1.0) * eDef * sDef * aDef,
-		exp = (physique and physique.expMult or 1.0) * aExp * (daoEntry and daoEntry.expMult or 1.0) * eExp * sExp,
+		hp  = (physique and physique.hpMult  or 1.0) * statBonus * (daoEntry and daoEntry.hpMult  or 1.0) * eHp  * sHp  * aHp  * comp.hp  * form.hp  * titl.hp  * rank.all,
+		dmg = (physique and physique.dmgMult or 1.0) * statBonus * (daoEntry and daoEntry.dmgMult or 1.0) * eDmg * sDmg * aDmg * comp.dmg * form.dmg * titl.dmg * rank.all * rank.dmg,
+		def = (physique and physique.defMult or 1.0) * statBonus * (daoEntry and daoEntry.defMult or 1.0) * eDef * sDef * aDef * comp.def * form.def * titl.def * rank.all,
+		exp = (physique and physique.expMult or 1.0) * aExp * (daoEntry and daoEntry.expMult or 1.0) * eExp * sExp * comp.exp * form.exp * titl.exp * rank.exp,
 		lifespan = lifespanMult * aLife,
+		bonusLifespan = comp.lifespan,
 	}
 end
 

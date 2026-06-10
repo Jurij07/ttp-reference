@@ -51,18 +51,19 @@ This compares the main elements of *Top Tier Providence* (novel / manhwa + the
 | Hidden Sects (4) | ✅ Join, sect-EXP from combat, milestone buffs |
 | Karma System (7 tiers) | 🟡 Karma stat affects tribulation; tiers/events not yet wired |
 
-## 5. Not Yet Built (next candidates)
+## 5. Side Systems
 
 | TTP Element | Reference detail | Status |
 |---|---|---|
-| Spirit Companions | 8 pets, bond levels, combat assist | ❌ |
-| Formations | 10 (passive/active combat arrays) | ❌ |
-| Dungeons | 5 instances, floors, cooldowns, loot | ❌ |
-| Titles & Achievements | 25 milestone titles with stat bonuses | ❌ |
-| Fate Events | Random good/bad events ~every 30s | ❌ |
-| Leaderboard & Rank Titles | 6 categories, top-3 bonuses | ❌ |
-| PvP | Player-vs-player victories | ❌ |
-| Robux monetization | Developer Products + GamePasses | ❌ |
+| Spirit Companions | 8 pets, bond levels, combat assist | ✅ Buy/summon, bond-EXP from combat, scaling buffs |
+| Formations | 10 (passive/active combat arrays) | ✅ Buy/activate, one active, stat buffs |
+| Dungeons | 5 instances, floors, cooldowns, loot | ✅ Enter/exit, floors, EXP/Stone mult, cooldowns |
+| Titles & Achievements | 25 milestone titles with stat bonuses | ✅ Auto-unlock, equip, passive bonuses |
+| Fate Events / Book of Misfortune | Random good/bad events by karma ~every 35s | ✅ Book of Fortune & Misfortune + event log |
+| Karma System | 7 tiers, affects tribulation & fate | ✅ Tiers + karma drives fate/tribulation |
+| Leaderboard & Rank Titles | 6 categories, top-3 bonuses | ✅ Live standings + #1 rank bonuses |
+| PvP | Player-vs-player victories | ✅ Opt-in toggle + [G] duel nearest |
+| Robux monetization | Developer Products + GamePasses | ✅ Store + ProcessReceipt (placeholder IDs) |
 | Status-effect combat hooks | Apply the 14 effects in fights | 🟡 data ready |
 | Per-realm distinct worlds | Unique terrain/theme per realm | 🟡 Teleport between realm zones exists |
 
@@ -81,6 +82,12 @@ This compares the main elements of *Top Tier Providence* (novel / manhwa + the
 
 ### Rough completeness
 - **Core loop + Providence + combat content:** ~85%
-- **Heaven/progression systems:** ~70%
-- **Side systems (companions/formations/dungeons/titles/fate/leaderboard/PvP/Robux):** ~5%
-- **Overall vs. full TTP reference:** ~55–60%
+- **Heaven/progression systems:** ~75%
+- **Side systems (companions/formations/dungeons/titles/fate/leaderboard/PvP/Robux):** ~80%
+- **Overall vs. full TTP reference:** ~80%
+
+### Remaining polish
+- Apply the 14 status effects inside combat (data is ready)
+- Unique terrain per realm (zones + teleport already exist)
+- Configure real Robux product/GamePass IDs in `RobuxService.lua`
+- Dao mastery counter for the Dao-count titles

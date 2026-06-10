@@ -53,6 +53,12 @@ local function rewardKill(player: Player, model: Model)
 	local isBoss = model:GetAttribute("Boss") == true
 	local realmId = (model:GetAttribute("RealmId") or 1) :: number
 
+	-- Dungeon-Multiplikatoren auf EXP/Stones anwenden.
+	local DungeonService = require(script.Parent.DungeonService)
+	local expMult, stoneMult = DungeonService.GetMultipliers(player)
+	exp    = math.floor(exp * expMult)
+	stones = math.floor(stones * stoneMult)
+
 	CultivationService.AddEXP(player, exp)
 	CultivationService.AddStones(player, stones)
 	CultivationService.AddKill(player)
@@ -62,7 +68,7 @@ local function rewardKill(player: Player, model: Model)
 	end
 
 	local name = model:GetAttribute("NPCName") or model.Name
-	notifyEvent:FireClient(player, ("⚔️ %s besiegt! +%d EXP, +%d 💰"):format(name, exp, stones), "good")
+	notifyEvent:FireClient(player, ("⚔️ Defeated %s! +%d EXP, +%d 💰"):format(name, exp, stones), "good")
 end
 
 function CombatService.DealDamage(player: Player, model: Model, rawDmg: number, triggerCounter: boolean)

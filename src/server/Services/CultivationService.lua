@@ -99,7 +99,7 @@ function CultivationService.RecomputeStats(player: Player)
 	local baseLife = CultivationData.GetLifespan(profile.realm)
 	local infinite = baseLife == math.huge
 	player:SetAttribute("LifespanInfinite", infinite)
-	local maxLife = (infinite and LIFESPAN_INF_SENTINEL or baseLife * m.lifespan) + (profile.bonusLifespan or 0)
+	local maxLife = (infinite and LIFESPAN_INF_SENTINEL or baseLife * m.lifespan) + (profile.bonusLifespan or 0) + (m.bonusLifespan or 0)
 	player:SetAttribute("MaxLifespan", maxLife)
 
 	updateProgressAttributes(player, profile)
@@ -162,6 +162,8 @@ function CultivationService.DoRealmUp(player: Player)
 	CultivationService.RecomputeStats(player)
 	local QuestService = require(script.Parent.QuestService)
 	QuestService.Refresh(player)
+	local TitleService = require(script.Parent.TitleService)
+	TitleService.CheckUnlocks(player)
 end
 
 -- isRaw=true skips Providence + Buff multipliers (for quest/item rewards)
@@ -191,6 +193,11 @@ function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: bo
 		if profile.sectId then
 			local SectService = require(script.Parent.SectService)
 			SectService.AddSectExp(player, gained * 0.05)
+		end
+		-- Begleiter-Bond-EXP: 10% der gewonnenen EXP.
+		if profile.activeCompanion then
+			local CompanionService = require(script.Parent.CompanionService)
+			CompanionService.AddBondExp(player, gained * 0.10)
 		end
 	end
 
@@ -250,6 +257,9 @@ function CultivationService.AddStones(player: Player, amount: number)
 	local profile = DataManager.Get(player)
 	if not profile then return end
 	profile.spiritStones = (profile.spiritStones or 0) + amount
+	if amount > 0 then
+		profile.lifetimeStones = (profile.lifetimeStones or 0) + amount
+	end
 	player:SetAttribute("SpiritStones", profile.spiritStones)
 end
 
@@ -258,6 +268,11 @@ function CultivationService.AddKill(player: Player)
 	if not profile then return end
 	profile.totalKills = (profile.totalKills or 0) + 1
 	player:SetAttribute("TotalKills", profile.totalKills)
+	-- Dungeon-Fortschritt + Titel-Freischaltungen
+	local DungeonService = require(script.Parent.DungeonService)
+	DungeonService.OnKill(player)
+	local TitleService = require(script.Parent.TitleService)
+	TitleService.CheckUnlocks(player)
 end
 
 function CultivationService.Start()

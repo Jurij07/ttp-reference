@@ -35,6 +35,12 @@ local function breakthroughResist(profile: any): number
 	local prov = profile.providence
 	local evo = PhysiqueEvolutionData.ResolveStage(prov and prov.physique, profile.realm, profile.totalExpEarned or 0)
 	resist += evo.breakthroughBonus
+	-- Equipped title may add tribulation resist (break_bonus).
+	if profile.activeTitle then
+		local TitleData = require(GameData:WaitForChild("TitleData"))
+		local t = TitleData.Get(profile.activeTitle)
+		if t then resist += t.breakBonus end
+	end
 	return math.clamp(resist, 0, 0.75)
 end
 
@@ -90,6 +96,9 @@ function TribulationService.Begin(player: Player, fromRealm: number)
 		-- Alle Wellen überlebt → Erfolg
 		player:SetAttribute("InTribulation", false)
 		Net.Event("TribulationEnded"):FireClient(player, true)
+		profile.tribulationsSurvived = (profile.tribulationsSurvived or 0) + 1
+		local TitleService = require(script.Parent.TitleService)
+		TitleService.CheckUnlocks(player)
 
 		-- Erst aufsteigen (setzt exp=0, Realm+1), DANN Belohnung auf den
 		-- neuen Realm gutschreiben — sonst würde die Belohnungs-EXP sofort

@@ -205,7 +205,18 @@ local shopLayer      = mkOverlay("ShopLayer")
 local questLayer     = mkOverlay("QuestLayer")
 local sectLayer      = mkOverlay("SectLayer")
 local worldLayer     = mkOverlay("WorldLayer")
+local companionLayer = mkOverlay("CompanionLayer")
+local formationLayer = mkOverlay("FormationLayer")
+local titleLayer     = mkOverlay("TitleLayer")
+local dungeonLayer   = mkOverlay("DungeonLayer")
+local leaderLayer    = mkOverlay("LeaderLayer")
+local bookLayer      = mkOverlay("BookLayer")
+local storeLayer     = mkOverlay("StoreLayer")
 local SectData       = require(GameData:WaitForChild("SectData"))
+local CompanionData  = require(GameData:WaitForChild("CompanionData"))
+local FormationData  = require(GameData:WaitForChild("FormationData"))
+local TitleData      = require(GameData:WaitForChild("TitleData"))
+local DungeonData    = require(GameData:WaitForChild("DungeonData"))
 
 -- Teleport target for a realm zone (matches the NPCService spawn layout).
 local function realmZonePosition(realmId: number): Vector3
@@ -295,21 +306,38 @@ local seclCancelPopup   = mkButton(seclPopup,"✕ Cancel",      UDim2.new(1,-20,
 -- ════════════════════════════════════════════════════════════
 -- ── Main Menu overlay
 -- ════════════════════════════════════════════════════════════
-local mainMenuCard = mkPanel("Card",UDim2.new(0,320,0,240),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), mainMenuLayer)
-mkLabel(mainMenuCard,"MAIN MENU",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,16),C.gold,20,Enum.Font.GothamBlack,Enum.TextXAlignment.Center)
+local mainMenuCard = mkPanel("Card",UDim2.new(0,420,0,420),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), mainMenuLayer)
+mkLabel(mainMenuCard,"☯️  CULTIVATION HUB",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,20,Enum.Font.GothamBlack,Enum.TextXAlignment.Center)
 local closeMainMenu = mkButton(mainMenuCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5); closeMainMenu.TextSize = 16
-local mmItems = {
-	{ text="📖 View Providence", y=56 },
-	{ text="🏪 Shop",               y=104 },
-	{ text="📜 Quests",             y=152 },
-	{ text="🔄 Leave Game",    y=200 },
-}
-local mmButtons: { TextButton } = {}
-for _, item in ipairs(mmItems) do
-	local b = mkButton(mainMenuCard, item.text, UDim2.new(1,-30,0,40), UDim2.fromOffset(15, item.y), C.bg4)
-	b.TextXAlignment = Enum.TextXAlignment.Left
-	table.insert(mmButtons, b)
+
+local hubGrid = Instance.new("Frame")
+hubGrid.Size = UDim2.new(1,-24,1,-56); hubGrid.Position = UDim2.fromOffset(12,48)
+hubGrid.BackgroundTransparency = 1; hubGrid.Parent = mainMenuCard
+local hubLayout = Instance.new("UIGridLayout")
+hubLayout.CellSize = UDim2.fromOffset(126,56); hubLayout.CellPadding = UDim2.fromOffset(8,8)
+hubLayout.Parent = hubGrid
+
+-- hub buttons are wired further down once all rebuild fns exist
+local hubButtons: { [string]: TextButton } = {}
+local function hubBtn(key: string, text: string)
+	local b = mkButton(hubGrid, text, UDim2.fromOffset(126,56), UDim2.fromOffset(0,0), C.bg4)
+	b.TextSize = 13
+	hubButtons[key] = b
 end
+hubBtn("providence","📖 Providence")
+hubBtn("shop","🏪 Shop")
+hubBtn("quests","📜 Quests")
+hubBtn("sects","🏯 Sects")
+hubBtn("companions","🐾 Companions")
+hubBtn("formations","⭕ Formations")
+hubBtn("titles","🏆 Titles")
+hubBtn("dungeons","🗺️ Dungeons")
+hubBtn("world","🌀 Teleport")
+hubBtn("leaderboard","👑 Leaderboard")
+hubBtn("book","📖 Book of Fate")
+hubBtn("pvp","⚔️ Toggle PvP")
+hubBtn("store","💎 Store")
+hubBtn("leave","🔄 Leave")
 
 -- ════════════════════════════════════════════════════════════
 -- ── Inventory overlay
@@ -687,6 +715,240 @@ local function rebuildWorlds()
 		tpBtn.TextSize = 12
 		local thisRealm = realmId
 		tpBtn.MouseButton1Click:Connect(function() doTeleport(thisRealm) end)
+	end
+end
+
+-- ════════════════════════════════════════════════════════════
+-- ── Generic system overlays (companions, formations, titles, …)
+-- ════════════════════════════════════════════════════════════
+local function mkSystemCard(layer: Frame, title: string): (Frame, ScrollingFrame, TextLabel)
+	local card = mkPanel("Card",UDim2.new(0,600,0,520),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), layer)
+	mkLabel(card,title,UDim2.new(1,-200,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
+	local close = mkButton(card,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
+	close.MouseButton1Click:Connect(function() layer.Visible = false end)
+	local info = mkLabel(card,"",UDim2.new(0,260,0,18),UDim2.new(1,-300,0,18),C.t2,11,Enum.Font.GothamBold,Enum.TextXAlignment.Right)
+	local list, _ = mkScrollList(card, UDim2.new(1,-20,1,-60), UDim2.fromOffset(10,52))
+	return card, list, info
+end
+
+-- ── Companions ──────────────────────────────────────────────
+local _, compList, compInfo = mkSystemCard(companionLayer, "🐾  SPIRIT COMPANIONS")
+local compState = { owned = {}, active = nil }
+local buyCompanion = Net.Event("BuyCompanion")
+local setCompanion = Net.Event("SetCompanion")
+local function rebuildCompanions()
+	for _, c in ipairs(compList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+	local stones = player:GetAttribute("SpiritStones") or 0
+	compInfo.Text = "💰 " .. fmt(stones)
+	for order, c in ipairs(CompanionData.COMPANIONS) do
+		local owned = compState.owned[c.id]
+		local row = Instance.new("Frame"); row.LayoutOrder = order
+		row.Size = UDim2.new(1,0,0,64); row.BorderSizePixel = 0
+		row.BackgroundColor3 = compState.active == c.id and Color3.fromHex("121E2E") or C.bg3
+		corner(row,6); stroke(row, compState.active == c.id and C.gold or C.border); row.Parent = compList
+		local rar = RARITY[c.rarity] or C.t1
+		mkLabel(row, c.icon .. "  " .. c.name, UDim2.new(1,-130,0,20), UDim2.fromOffset(10,6), rar, 13, Enum.Font.GothamBold)
+		mkLabel(row, c.desc, UDim2.new(1,-130,0,16), UDim2.fromOffset(10,28), C.t3, 10)
+		mkLabel(row, owned and ("Bond Lv %d/10"):format(owned.level) or ("💰 " .. fmt(c.cost)),
+			UDim2.new(1,-130,0,14), UDim2.fromOffset(10,46), owned and C.cyan or C.gold, 10)
+		if not owned then
+			local b = mkButton(row,"Tame",UDim2.new(0,100,0,30),UDim2.new(1,-110,0.5,-15),C.a1); b.TextSize=12
+			b.MouseButton1Click:Connect(function() buyCompanion:FireServer(c.id) end)
+		elseif compState.active == c.id then
+			mkLabel(row,"✓ Active",UDim2.new(0,100,0,28),UDim2.new(1,-110,0.5,-14),C.gold,12,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+		else
+			local b = mkButton(row,"Summon",UDim2.new(0,100,0,30),UDim2.new(1,-110,0.5,-15),C.green); b.TextSize=12
+			b.MouseButton1Click:Connect(function() setCompanion:FireServer(c.id) end)
+		end
+	end
+end
+Net.Event("CompanionSync").OnClientEvent:Connect(function(data: any)
+	compState.owned = data.owned or {}; compState.active = data.active
+	if companionLayer.Visible then rebuildCompanions() end
+end)
+
+-- ── Formations ──────────────────────────────────────────────
+local _, formList, formInfo = mkSystemCard(formationLayer, "⭕  FORMATIONS")
+local formState = { owned = {}, active = nil }
+local buyFormation = Net.Event("BuyFormation")
+local setFormation = Net.Event("SetFormation")
+local function rebuildFormations()
+	for _, c in ipairs(formList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+	formInfo.Text = "💰 " .. fmt(player:GetAttribute("SpiritStones") or 0)
+	local realm = player:GetAttribute("Realm") or 1
+	for order, f in ipairs(FormationData.FORMATIONS) do
+		local owned = formState.owned[f.id]
+		local row = Instance.new("Frame"); row.LayoutOrder = order
+		row.Size = UDim2.new(1,0,0,62); row.BorderSizePixel = 0
+		row.BackgroundColor3 = formState.active == f.id and Color3.fromHex("121E2E") or C.bg3
+		corner(row,6); stroke(row, formState.active == f.id and C.gold or C.border); row.Parent = formList
+		mkLabel(row, f.icon .. "  " .. f.name .. ("  [%s]"):format(f.ftype), UDim2.new(1,-130,0,20), UDim2.fromOffset(10,5), C.t1, 12, Enum.Font.GothamBold)
+		mkLabel(row, f.bonusText, UDim2.new(1,-130,0,16), UDim2.fromOffset(10,26), C.green, 10)
+		mkLabel(row, ("Realm %d · %s"):format(f.reqRealm, f.cost > 0 and ("💰"..fmt(f.cost)) or "Free"),
+			UDim2.new(1,-130,0,14), UDim2.fromOffset(10,44), C.t3, 10)
+		if not owned then
+			local locked = realm < f.reqRealm
+			local b = mkButton(row, locked and "🔒" or "Learn", UDim2.new(0,100,0,30),UDim2.new(1,-110,0.5,-15), locked and C.bg5 or C.a1); b.TextSize=12
+			if not locked then b.MouseButton1Click:Connect(function() buyFormation:FireServer(f.id) end) end
+		elseif formState.active == f.id then
+			mkLabel(row,"✓ Active",UDim2.new(0,100,0,28),UDim2.new(1,-110,0.5,-14),C.gold,12,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+		else
+			local b = mkButton(row,"Activate",UDim2.new(0,100,0,30),UDim2.new(1,-110,0.5,-15),C.green); b.TextSize=12
+			b.MouseButton1Click:Connect(function() setFormation:FireServer(f.id) end)
+		end
+	end
+end
+Net.Event("FormationSync").OnClientEvent:Connect(function(data: any)
+	formState.owned = data.owned or {}; formState.active = data.active
+	if formationLayer.Visible then rebuildFormations() end
+end)
+
+-- ── Titles ──────────────────────────────────────────────────
+local _, titleList, titleInfo = mkSystemCard(titleLayer, "🏆  TITLES")
+local titleState = { unlocked = {}, active = nil }
+local setTitle = Net.Event("SetTitle")
+local function rebuildTitles()
+	for _, c in ipairs(titleList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+	local n = 0; for _ in pairs(titleState.unlocked) do n += 1 end
+	titleInfo.Text = ("%d / %d unlocked"):format(n, #TitleData.TITLES)
+	for order, t in ipairs(TitleData.TITLES) do
+		local unlocked = titleState.unlocked[t.id]
+		local row = Instance.new("Frame"); row.LayoutOrder = order
+		row.Size = UDim2.new(1,0,0,52); row.BorderSizePixel = 0
+		row.BackgroundColor3 = titleState.active == t.id and Color3.fromHex("121E2E") or C.bg3
+		corner(row,6); stroke(row, titleState.active == t.id and C.gold or C.border); row.Parent = titleList
+		local rar = RARITY[t.rarity] or C.t1
+		mkLabel(row, t.icon .. "  " .. t.name, UDim2.new(1,-120,0,20), UDim2.fromOffset(10,6), unlocked and rar or C.t3, 13, Enum.Font.GothamBold)
+		mkLabel(row, unlocked and t.desc or ("🔒 " .. t.desc), UDim2.new(1,-120,0,16), UDim2.fromOffset(10,28), C.t3, 10)
+		if unlocked then
+			if titleState.active == t.id then
+				mkLabel(row,"✓ Worn",UDim2.new(0,96,0,28),UDim2.new(1,-106,0.5,-14),C.gold,12,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+			else
+				local b = mkButton(row,"Equip",UDim2.new(0,96,0,28),UDim2.new(1,-106,0.5,-14),C.green); b.TextSize=12
+				b.MouseButton1Click:Connect(function() setTitle:FireServer(t.id) end)
+			end
+		end
+	end
+end
+Net.Event("TitleSync").OnClientEvent:Connect(function(data: any)
+	titleState.unlocked = data.unlocked or {}; titleState.active = data.active
+	if titleLayer.Visible then rebuildTitles() end
+end)
+
+-- ── Dungeons ────────────────────────────────────────────────
+local _, dungList, dungInfo = mkSystemCard(dungeonLayer, "🗺️  DUNGEONS")
+local dungState = { active = nil, cooldowns = {} }
+local enterDungeon = Net.Event("EnterDungeon")
+local exitDungeon  = Net.Event("ExitDungeon")
+local function rebuildDungeons()
+	for _, c in ipairs(dungList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+	local realm = player:GetAttribute("Realm") or 1
+	dungInfo.Text = dungState.active and ("In: " .. (dungState.active.id or "")) or "Not in a dungeon"
+	for order, d in ipairs(DungeonData.DUNGEONS) do
+		local row = Instance.new("Frame"); row.LayoutOrder = order
+		row.Size = UDim2.new(1,0,0,64); row.BorderSizePixel = 0
+		local inThis = dungState.active and dungState.active.id == d.id
+		row.BackgroundColor3 = inThis and Color3.fromHex("121E2E") or C.bg3
+		corner(row,6); stroke(row, inThis and C.gold or C.border); row.Parent = dungList
+		mkLabel(row, d.icon .. "  " .. d.name, UDim2.new(1,-130,0,20), UDim2.fromOffset(10,5), C.t1, 13, Enum.Font.GothamBold)
+		mkLabel(row, ("%s · %d floors · EXP×%.1f Stones×%.1f"):format(d.desc, d.floors, d.expMult, d.stoneMult),
+			UDim2.new(1,-130,0,16), UDim2.fromOffset(10,26), C.t3, 10)
+		local cd = dungState.cooldowns[d.id] or 0
+		mkLabel(row, ("Realm %d+%s"):format(d.reqRealm, cd > 0 and ("  · CD " .. formatTime(cd)) or ""),
+			UDim2.new(1,-130,0,14), UDim2.fromOffset(10,44), cd>0 and C.warn or C.t3, 10)
+		if inThis then
+			local b = mkButton(row, ("Exit (F%d)"):format(dungState.active.floor or 1), UDim2.new(0,100,0,30),UDim2.new(1,-110,0.5,-15),C.hp); b.TextSize=12
+			b.MouseButton1Click:Connect(function() exitDungeon:FireServer() end)
+		else
+			local locked = realm < d.reqRealm or cd > 0 or dungState.active ~= nil
+			local b = mkButton(row, locked and "🔒" or "Enter", UDim2.new(0,100,0,30),UDim2.new(1,-110,0.5,-15), locked and C.bg5 or C.a1); b.TextSize=12
+			if not locked then b.MouseButton1Click:Connect(function() enterDungeon:FireServer(d.id) end) end
+		end
+	end
+end
+Net.Event("DungeonSync").OnClientEvent:Connect(function(data: any)
+	dungState.active = data.active; dungState.cooldowns = data.cooldowns or {}
+	if dungeonLayer.Visible then rebuildDungeons() end
+end)
+
+-- ── Leaderboard ─────────────────────────────────────────────
+local _, leaderList, _ = mkSystemCard(leaderLayer, "👑  LEADERBOARD")
+local CAT_LABELS = { realm="⚡ Realm", exp="✨ Total EXP", kills="⚔️ Kills", pvp="🥊 PvP Wins", stones="💰 Stones", age="⏳ Oldest" }
+local function rebuildLeaderboard(board: any)
+	for _, c in ipairs(leaderList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+	local order = 0
+	for _, cat in ipairs({"realm","exp","kills","pvp","stones","age"}) do
+		order += 1
+		local header = Instance.new("Frame"); header.LayoutOrder = order
+		header.Size = UDim2.new(1,0,0,26); header.BackgroundColor3 = C.bg4; header.BorderSizePixel = 0
+		corner(header,5); header.Parent = leaderList
+		mkLabel(header, CAT_LABELS[cat], UDim2.new(1,-12,1,0), UDim2.fromOffset(10,0), C.gold, 12, Enum.Font.GothamBold).TextYAlignment = Enum.TextYAlignment.Center
+		local rows = (board and board[cat]) or {}
+		for i = 1, math.min(3, #rows) do
+			order += 1
+			local r = Instance.new("Frame"); r.LayoutOrder = order
+			r.Size = UDim2.new(1,0,0,24); r.BackgroundColor3 = C.bg3; r.BorderSizePixel = 0; corner(r,4); r.Parent = leaderList
+			local medal = i == 1 and "🥇" or i == 2 and "🥈" or "🥉"
+			mkLabel(r, ("%s %s"):format(medal, rows[i].name), UDim2.new(0.6,0,1,0), UDim2.fromOffset(10,0), C.t1, 11).TextYAlignment = Enum.TextYAlignment.Center
+			mkLabel(r, fmt(rows[i].value), UDim2.new(0.35,0,1,0), UDim2.new(0.6,0,0,0), C.cyan, 11, Enum.Font.GothamBold, Enum.TextXAlignment.Right).TextYAlignment = Enum.TextYAlignment.Center
+		end
+	end
+end
+Net.Event("LeaderboardSync").OnClientEvent:Connect(function(board: any)
+	if leaderLayer.Visible then rebuildLeaderboard(board) end
+	_G.__ttpBoard = board
+end)
+
+-- ── Book of Fate (event log) ────────────────────────────────
+local _, bookList, bookInfo = mkSystemCard(bookLayer, "📖  BOOK OF FORTUNE & MISFORTUNE")
+bookInfo.Text = "Karma-driven fate"
+local fateLog: { any } = {}
+local function rebuildBook()
+	for _, c in ipairs(bookList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
+	if #fateLog == 0 then
+		local e = Instance.new("TextLabel"); e.Size = UDim2.new(1,0,0,40); e.BackgroundTransparency=1
+		e.Text = "The Book is quiet… a fate event occurs roughly every 35s."; e.TextColor3 = C.t3
+		e.TextSize = 12; e.Font = Enum.Font.Gotham; e.TextWrapped = true; e.Parent = bookList
+		return
+	end
+	for order, ev in ipairs(fateLog) do
+		local row = Instance.new("Frame"); row.LayoutOrder = order
+		row.Size = UDim2.new(1,0,0,48); row.BorderSizePixel = 0; row.BackgroundColor3 = C.bg3; corner(row,6)
+		local col = ev.kind == "GOOD" and C.green or (ev.kind == "BAD" and C.hp or C.a1)
+		stroke(row, col); row.Parent = bookList
+		mkLabel(row, ev.icon .. "  " .. ev.name, UDim2.new(1,-16,0,18), UDim2.fromOffset(10,6), col, 12, Enum.Font.GothamBold)
+		mkLabel(row, ev.desc, UDim2.new(1,-16,0,16), UDim2.fromOffset(10,26), C.t3, 10)
+	end
+end
+Net.Event("FateEvent").OnClientEvent:Connect(function(icon, name, kind, desc)
+	table.insert(fateLog, 1, { icon=icon, name=name, kind=kind, desc=desc })
+	if #fateLog > 20 then table.remove(fateLog) end
+	if bookLayer.Visible then rebuildBook() end
+end)
+
+-- ── Store (Robux) ───────────────────────────────────────────
+local _, storeList, _ = mkSystemCard(storeLayer, "💎  STORE")
+local promptProduct = Net.Event("PromptProduct")
+local promptPass    = Net.Event("PromptPass")
+local STORE_ITEMS = {
+	{ icon="💰", name="1,000 Spirit Stones", desc="Instant Spirit Stones", kind="product", id=0 },
+	{ icon="🎲", name="Extra Reroll Pack",   desc="+3 rerolls per attribute", kind="product", id=0 },
+	{ icon="⚡", name="10x EXP (1 hour)",     desc="EXP ×10 for one hour", kind="product", id=0 },
+	{ icon="👑", name="VIP — 2x EXP Forever", desc="Permanent +100% EXP", kind="pass", id=0 },
+	{ icon="🤖", name="Auto-Cultivate",       desc="Cultivate while away", kind="pass", id=0 },
+}
+do
+	for order, it in ipairs(STORE_ITEMS) do
+		local row = Instance.new("Frame"); row.LayoutOrder = order
+		row.Size = UDim2.new(1,0,0,56); row.BackgroundColor3 = C.bg3; row.BorderSizePixel = 0
+		corner(row,6); stroke(row,C.border); row.Parent = storeList
+		mkLabel(row, it.icon .. "  " .. it.name, UDim2.new(1,-110,0,20), UDim2.fromOffset(10,6), C.gold, 13, Enum.Font.GothamBold)
+		mkLabel(row, it.desc, UDim2.new(1,-110,0,16), UDim2.fromOffset(10,28), C.t3, 10)
+		local b = mkButton(row,"Buy",UDim2.new(0,90,0,30),UDim2.new(1,-100,0.5,-15),C.green); b.TextSize=12
+		local kind, id = it.kind, it.id
+		b.MouseButton1Click:Connect(function()
+			if kind == "pass" then promptPass:FireServer(id) else promptProduct:FireServer(id) end
+		end)
 	end
 end
 
@@ -1139,6 +1401,10 @@ function closeAllOverlays()
 	mainMenuLayer.Visible = false; inventoryLayer.Visible = false
 	shopLayer.Visible = false;     questLayer.Visible = false
 	sectLayer.Visible = false;     worldLayer.Visible = false
+	companionLayer.Visible = false; formationLayer.Visible = false
+	titleLayer.Visible = false;     dungeonLayer.Visible = false
+	leaderLayer.Visible = false;    bookLayer.Visible = false
+	storeLayer.Visible = false
 end
 
 mainMenuBtn.MouseButton1Click:Connect(function() closeAllOverlays(); mainMenuLayer.Visible = true end)
@@ -1175,19 +1441,47 @@ worldBtn.MouseButton1Click:Connect(function()
 end)
 closeWorld.MouseButton1Click:Connect(function() worldLayer.Visible = false end)
 
-mmButtons[1].MouseButton1Click:Connect(function()
-	mainMenuLayer.Visible = false
+-- ── Hub buttons (the ≡ main menu grid) ──────────────────────
+local function openOnly(layer: Frame, rebuild: (() -> ())?)
+	closeAllOverlays()
+	if rebuild then rebuild() end
+	layer.Visible = true
+end
+hubButtons.providence.MouseButton1Click:Connect(function()
+	closeAllOverlays()
 	showToast("☯️ " ..
 		(player:GetAttribute("Aptitude") or "?") .. " · " ..
 		(player:GetAttribute("Physique") or "?") .. " · " ..
 		(player:GetAttribute("Connate")  or "?") .. " · " ..
 		(player:GetAttribute("DaoAffinity") or "?"), "gold")
 end)
-mmButtons[2].MouseButton1Click:Connect(function() mainMenuLayer.Visible = false; rebuildShop(); shopLayer.Visible = true end)
-mmButtons[3].MouseButton1Click:Connect(function() mainMenuLayer.Visible = false; questLayer.Visible = true; rebuildQuests() end)
-mmButtons[4].MouseButton1Click:Connect(function()
+hubButtons.shop.MouseButton1Click:Connect(function() openOnly(shopLayer, rebuildShop) end)
+hubButtons.quests.MouseButton1Click:Connect(function() openOnly(questLayer, rebuildQuests) end)
+hubButtons.sects.MouseButton1Click:Connect(function() openOnly(sectLayer, rebuildSects) end)
+hubButtons.companions.MouseButton1Click:Connect(function() openOnly(companionLayer, rebuildCompanions) end)
+hubButtons.formations.MouseButton1Click:Connect(function() openOnly(formationLayer, rebuildFormations) end)
+hubButtons.titles.MouseButton1Click:Connect(function() openOnly(titleLayer, rebuildTitles) end)
+hubButtons.dungeons.MouseButton1Click:Connect(function() openOnly(dungeonLayer, rebuildDungeons) end)
+hubButtons.world.MouseButton1Click:Connect(function() openOnly(worldLayer, rebuildWorlds) end)
+hubButtons.leaderboard.MouseButton1Click:Connect(function()
+	openOnly(leaderLayer)
+	rebuildLeaderboard(_G.__ttpBoard)
+end)
+hubButtons.book.MouseButton1Click:Connect(function() openOnly(bookLayer, rebuildBook) end)
+hubButtons.store.MouseButton1Click:Connect(function() openOnly(storeLayer) end)
+hubButtons.pvp.MouseButton1Click:Connect(function() Net.Event("TogglePvP"):FireServer() end)
+hubButtons.leave.MouseButton1Click:Connect(function()
 	showToast("Use the Roblox menu (Esc → Leave) to exit.", "info")
 	mainMenuLayer.Visible = false
+end)
+bindAttr("PvPEnabled", function(v)
+	hubButtons.pvp.Text = v and "⚔️ PvP: ON" or "⚔️ Toggle PvP"
+	hubButtons.pvp.BackgroundColor3 = v and C.hp or C.bg4
+end)
+-- Live-refresh open system overlays when stones change (affordability).
+player:GetAttributeChangedSignal("SpiritStones"):Connect(function()
+	if companionLayer.Visible then rebuildCompanions() end
+	if formationLayer.Visible then rebuildFormations() end
 end)
 
 -- ════════════════════════════════════════════════════════════
@@ -1199,7 +1493,9 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	local key = input.KeyCode
 	if key == Enum.KeyCode.Escape then
-		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible or sectLayer.Visible or worldLayer.Visible then
+		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible
+			or sectLayer.Visible or worldLayer.Visible or companionLayer.Visible or formationLayer.Visible
+			or titleLayer.Visible or dungeonLayer.Visible or leaderLayer.Visible or bookLayer.Visible or storeLayer.Visible then
 			closeAllOverlays()
 		elseif seclPopup.Visible then
 			seclPopup.Visible = false
@@ -1212,6 +1508,12 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		if not player:GetAttribute("InMenu") and not player:GetAttribute("InSeclusion")
 			and not player:GetAttribute("InTribulation") then
 			useTechRemote:FireServer()
+		end
+	elseif key == Enum.KeyCode.G then
+		-- PvP strike on the nearest enabled cultivator
+		if player:GetAttribute("PvPEnabled") and not player:GetAttribute("InMenu")
+			and not player:GetAttribute("InSeclusion") and not player:GetAttribute("InTribulation") then
+			Net.Event("PvPAttack"):FireServer()
 		end
 	end
 end)

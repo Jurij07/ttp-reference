@@ -41,6 +41,18 @@ local function defaultProfile(): any
 		inventory      = {},
 		equipment      = { weapon=nil, head=nil, body=nil, legs=nil, feet=nil, necklace=nil, ring=nil },
 		quests         = {},
+		-- New systems
+		companions       = {},     -- [id] = { level=1, exp=0 }
+		activeCompanion  = nil,
+		ownedFormations  = { five_elements = true },
+		activeFormation  = "five_elements",
+		unlockedTitles   = {},
+		activeTitle      = nil,
+		pvpEnabled       = false,
+		pvpWins          = 0,
+		tribulationsSurvived = 0,
+		lifetimeStones   = 0,
+		daoMastered      = {},     -- set of dao names mastered
 		physiqueStage  = 1,        -- aktuelle Physique-Evolutions-Stufe
 		sectId         = nil,      -- beigetretene Sekte (oder nil)
 		sectLevel      = 0,        -- Sekten-Level
@@ -75,6 +87,15 @@ local function reconcile(profile: any)
 	if type(profile.equipment) ~= "table" then
 		profile.equipment = { weapon=nil, head=nil, body=nil, legs=nil, feet=nil, necklace=nil, ring=nil }
 	end
+	if type(profile.companions) ~= "table" then profile.companions = {} end
+	if type(profile.ownedFormations) ~= "table" then profile.ownedFormations = { five_elements = true } end
+	if profile.activeFormation == nil then profile.activeFormation = "five_elements" end
+	if type(profile.unlockedTitles) ~= "table" then profile.unlockedTitles = {} end
+	if type(profile.pvpWins) ~= "number" then profile.pvpWins = 0 end
+	if type(profile.tribulationsSurvived) ~= "number" then profile.tribulationsSurvived = 0 end
+	if type(profile.lifetimeStones) ~= "number" then profile.lifetimeStones = 0 end
+	if type(profile.daoMastered) ~= "table" then profile.daoMastered = {} end
+	if type(profile.pvpEnabled) ~= "boolean" then profile.pvpEnabled = false end
 end
 
 local function keyFor(userId: number): string

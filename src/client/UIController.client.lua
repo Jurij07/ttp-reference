@@ -1022,6 +1022,7 @@ end -- store
 -- ════════════════════════════════════════════════════════════
 -- ── Heaven Tribulation overlay
 -- ════════════════════════════════════════════════════════════
+do
 local tribLayer = Instance.new("Frame"); tribLayer.Name = "TribulationLayer"
 tribLayer.Size = UDim2.fromScale(1,1); tribLayer.BackgroundColor3 = Color3.fromHex("0A0612")
 tribLayer.BackgroundTransparency = 0.35; tribLayer.Visible = false
@@ -1068,6 +1069,7 @@ Net.Event("TribulationEnded").OnClientEvent:Connect(function(success: boolean)
 		showToast("💀 Tribulation failed! Heal up and break through again.", "warn")
 	end
 end)
+end -- tribulation
 
 -- ════════════════════════════════════════════════════════════
 -- ── Providence start menu
@@ -1186,6 +1188,7 @@ end
 -- ════════════════════════════════════════════════════════════
 bindAttr("RealmName", function(v) realmNameL.Text = v or "—" end)
 
+do
 local function updateStage()
 	stageL.Text = ("Stage %d / %d  ·  %s"):format(
 		player:GetAttribute("Stage") or 1, player:GetAttribute("MaxStage") or 9,
@@ -1258,6 +1261,7 @@ bindAttr("InMenu", function(v)
 	menuRoot.Visible = (v == true)
 	hudRoot.Visible  = (v ~= true)
 end)
+end -- hud bindings
 
 -- ── Technique cooldown display ──────────────────────────────
 local techCooldownEnd = 0
@@ -1289,6 +1293,7 @@ end)
 -- ════════════════════════════════════════════════════════════
 -- ── Seclusion bindings + popup
 -- ════════════════════════════════════════════════════════════
+do
 local seclusionCountdown = 0
 local inSeclusionLocal = false
 
@@ -1352,10 +1357,12 @@ task.spawn(function()
 		end
 	end
 end)
+end -- seclusion
 
 -- ════════════════════════════════════════════════════════════
 -- ── Providence menu attribute blocks
 -- ════════════════════════════════════════════════════════════
+do
 local REROLL_ATTR_FOR_BLOCK = { aptitude="Rerolls_Aptitude", physique="Rerolls_Physique", connate="Rerolls_Connate", dao="Rerolls_Dao" }
 local ATTR_PLAYER_NAME = { aptitude="Aptitude", physique="Physique", connate="Connate", dao="DaoAffinity" }
 
@@ -1460,6 +1467,7 @@ rerollAttrRemote.OnClientEvent:Connect(function(success: boolean, msg: string)
 		showToast("❌ " .. tostring(msg), "warn")
 	end
 end)
+end -- providence attr blocks
 
 -- ════════════════════════════════════════════════════════════
 -- ── Button wiring

@@ -39,6 +39,7 @@ local function defaultProfile(): any
 		totalKills     = 0,
 		bossesKilled   = {},
 		inventory      = {},
+		equipment      = { weapon=nil, head=nil, body=nil, legs=nil, feet=nil, necklace=nil, ring=nil },
 		quests         = {},
 		physiqueStage  = 1,        -- aktuelle Physique-Evolutions-Stufe
 		sectId         = nil,      -- beigetretene Sekte (oder nil)
@@ -71,6 +72,9 @@ local function reconcile(profile: any)
 	if type(profile.physiqueStage) ~= "number" then profile.physiqueStage = 1 end
 	if type(profile.sectLevel) ~= "number" then profile.sectLevel = 0 end
 	if type(profile.sectExp) ~= "number" then profile.sectExp = 0 end
+	if type(profile.equipment) ~= "table" then
+		profile.equipment = { weapon=nil, head=nil, body=nil, legs=nil, feet=nil, necklace=nil, ring=nil }
+	end
 end
 
 local function keyFor(userId: number): string

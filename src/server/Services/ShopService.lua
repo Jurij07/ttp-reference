@@ -52,7 +52,7 @@ local function applyEffects(player: Player, item: any)
 
 		elseif kind == "exp_buff" then
 			Buffs.Apply(player, "Exp", eff.mult, eff.duration)
-			notifyEvent:FireClient(player, ("⚡ EXP ×%.1f für %ds aktiv!"):format(eff.mult, eff.duration), "gold")
+			notifyEvent:FireClient(player, ("⚡ EXP ×%.1f active for %ds!"):format(eff.mult, eff.duration), "gold")
 
 		elseif kind == "dmg_pct" then
 			-- Permanent equipment bonus — not yet stacking; ignore for consumables
@@ -73,28 +73,34 @@ function ShopService.Buy(player: Player, itemIdRaw: any)
 	if not itemId then return end
 	local item = ItemData.GetItem(itemId)
 	if not item or not ItemData.IsBuyable(item) then
-		notifyEvent:FireClient(player, "Dieses Item ist nicht käuflich.", "warn")
+		notifyEvent:FireClient(player, "This item cannot be purchased.", "warn")
 		return
 	end
 
 	local profile = DataManager.Get(player)
 	if not profile then return end
 
+	-- Realm-Gate: hochstufige Ware schaltet erst mit dem passenden Realm frei.
+	if ItemData.UnlockRealm(item) > (profile.realm or 1) then
+		notifyEvent:FireClient(player, "This item unlocks at a higher realm.", "warn")
+		return
+	end
+
 	if profile.spiritStones < item.cost then
-		notifyEvent:FireClient(player, "Nicht genug Spirit Stones.", "warn")
+		notifyEvent:FireClient(player, "Not enough Spirit Stones.", "warn")
 		return
 	end
 
 	local curStack = profile.inventory[itemId] or 0
 	if curStack >= item.stack then
-		notifyEvent:FireClient(player, "Stack voll.", "warn")
+		notifyEvent:FireClient(player, "Stack full.", "warn")
 		return
 	end
 
 	profile.spiritStones -= item.cost
 	profile.inventory[itemId] = curStack + 1
 	player:SetAttribute("SpiritStones", profile.spiritStones)
-	notifyEvent:FireClient(player, ("Gekauft: %s"):format(item.name), "green")
+	notifyEvent:FireClient(player, ("Bought: %s"):format(item.name), "green")
 	syncInventory(player)
 end
 
@@ -103,21 +109,21 @@ function ShopService.Use(player: Player, itemIdRaw: any)
 	if not itemId then return end
 	local item = ItemData.GetItem(itemId)
 	if not item or not ItemData.IsUsable(item) then
-		notifyEvent:FireClient(player, "Dieses Item kann nicht verwendet werden.", "warn")
+		notifyEvent:FireClient(player, "This item cannot be used.", "warn")
 		return
 	end
 
 	local profile = DataManager.Get(player)
 	if not profile then return end
 	if (profile.inventory[itemId] or 0) <= 0 then
-		notifyEvent:FireClient(player, "Kein Item im Inventar.", "warn")
+		notifyEvent:FireClient(player, "Item not in inventory.", "warn")
 		return
 	end
 
 	profile.inventory[itemId] -= 1
 	if profile.inventory[itemId] <= 0 then profile.inventory[itemId] = nil end
 	applyEffects(player, item)
-	notifyEvent:FireClient(player, ("Verwendet: %s"):format(item.name), "green")
+	notifyEvent:FireClient(player, ("Used: %s"):format(item.name), "green")
 	syncInventory(player)
 end
 

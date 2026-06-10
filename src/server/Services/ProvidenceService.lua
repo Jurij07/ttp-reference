@@ -79,12 +79,19 @@ function ProvidenceService.GetMultipliers(player: Player): { hp: number, dmg: nu
 		end
 	end
 
+	-- Aptitude trägt jetzt mehrere Stats bei (nicht nur EXP).
+	local aHp   = grade and grade.hpMult       or 1.0
+	local aDmg  = grade and grade.dmgMult      or 1.0
+	local aDef  = grade and grade.defMult      or 1.0
+	local aExp  = grade and grade.expMult      or (grade and grade.mult) or 1.0
+	local aLife = grade and grade.lifespanMult or 1.0
+
 	return {
-		hp  = (physique and physique.hpMult  or 1.0) * statBonus * (daoEntry and daoEntry.hpMult  or 1.0) * eHp  * sHp,
-		dmg = (physique and physique.dmgMult or 1.0) * statBonus * (daoEntry and daoEntry.dmgMult or 1.0) * eDmg * sDmg,
-		def = (physique and physique.defMult or 1.0) * statBonus * (daoEntry and daoEntry.defMult or 1.0) * eDef * sDef,
-		exp = (physique and physique.expMult or 1.0) * (grade and grade.mult or 1.0) * (daoEntry and daoEntry.expMult or 1.0) * eExp * sExp,
-		lifespan = lifespanMult,
+		hp  = (physique and physique.hpMult  or 1.0) * statBonus * (daoEntry and daoEntry.hpMult  or 1.0) * eHp  * sHp  * aHp,
+		dmg = (physique and physique.dmgMult or 1.0) * statBonus * (daoEntry and daoEntry.dmgMult or 1.0) * eDmg * sDmg * aDmg,
+		def = (physique and physique.defMult or 1.0) * statBonus * (daoEntry and daoEntry.defMult or 1.0) * eDef * sDef * aDef,
+		exp = (physique and physique.expMult or 1.0) * aExp * (daoEntry and daoEntry.expMult or 1.0) * eExp * sExp,
+		lifespan = lifespanMult * aLife,
 	}
 end
 

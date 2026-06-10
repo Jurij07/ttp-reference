@@ -43,19 +43,19 @@ function SectService.Join(player: Player, sectIdRaw: any)
 	local sectId = tostring(sectIdRaw)
 	local sect = SectData.Get(sectId)
 	if not sect then
-		notifyEvent:FireClient(player, "Unbekannte Sekte.", "warn")
+		notifyEvent:FireClient(player, "Unknown sect.", "warn")
 		return
 	end
 	if profile.sectId == sectId then return end
 	if profile.realm < sect.reqRealm then
-		notifyEvent:FireClient(player, ("%s benötigt Realm %d."):format(sect.name, sect.reqRealm), "warn")
+		notifyEvent:FireClient(player, ("%s requires Realm %d."):format(sect.name, sect.reqRealm), "warn")
 		return
 	end
 
 	profile.sectId = sectId
 	profile.sectLevel = math.max(1, profile.sectLevel or 0)
 	profile.sectExp = profile.sectExp or 0
-	notifyEvent:FireClient(player, ("🏯 Du bist der %s beigetreten!"):format(sect.name), "gold")
+	notifyEvent:FireClient(player, ("🏯 You joined the %s!"):format(sect.name), "gold")
 
 	local CultivationService = require(script.Parent.CultivationService)
 	CultivationService.RecomputeStats(player)
@@ -82,7 +82,7 @@ function SectService.AddSectExp(player: Player, amount: number)
 		local buff = SectData.BuffAtLevel(sect, profile.sectLevel)
 		if buff and buff.level == profile.sectLevel then
 			notifyEvent:FireClient(player,
-				("🏯 Sekten-Level %d: %s freigeschaltet!"):format(profile.sectLevel, buff.name), "gold")
+				("🏯 Sect Level %d: %s unlocked!"):format(profile.sectLevel, buff.name), "gold")
 		end
 	end
 

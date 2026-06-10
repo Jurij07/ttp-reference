@@ -14,6 +14,9 @@ local ProvidenceData = require(GameData:WaitForChild("ProvidenceData"))
 local ItemData      = require(GameData:WaitForChild("ItemData"))
 local QuestData     = require(GameData:WaitForChild("QuestData"))
 local TechniqueCatalog = require(GameData:WaitForChild("TechniqueCatalog"))
+local CultivationData = require(GameData:WaitForChild("CultivationData"))
+local NPCData       = require(GameData:WaitForChild("NPCData"))
+local Config        = require(ReplicatedStorage:WaitForChild("Config"))
 
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -114,6 +117,13 @@ local function mkBar(parent: Instance, fillColor: Color3, pos: UDim2, h: number)
 	return fill
 end
 
+local function lighten(c: Color3, amt: number): Color3
+	return Color3.new(
+		math.clamp(c.R + amt, 0, 1),
+		math.clamp(c.G + amt, 0, 1),
+		math.clamp(c.B + amt, 0, 1))
+end
+
 local function mkButton(parent: Instance, text: string, size: UDim2, pos: UDim2,
 		col: Color3, anchor: Vector2?): TextButton
 	local b = Instance.new("TextButton")
@@ -121,7 +131,22 @@ local function mkButton(parent: Instance, text: string, size: UDim2, pos: UDim2,
 	if anchor then b.AnchorPoint = anchor end
 	b.BackgroundColor3 = col; b.Text = text
 	b.TextColor3 = C.t1; b.TextSize = 14; b.Font = Enum.Font.GothamBold
-	b.AutoButtonColor = true; corner(b, 8); b.Parent = parent
+	b.AutoButtonColor = false; corner(b, 8); b.Parent = parent
+
+	-- Hover + press feedback (lighten on enter, slight grow; restore on leave).
+	local baseSize = size
+	b.MouseEnter:Connect(function()
+		TweenService:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = lighten(col, 0.10) }):Play()
+	end)
+	b.MouseLeave:Connect(function()
+		TweenService:Create(b, TweenInfo.new(0.12), { BackgroundColor3 = col, Size = baseSize }):Play()
+	end)
+	b.MouseButton1Down:Connect(function()
+		TweenService:Create(b, TweenInfo.new(0.08), { BackgroundColor3 = lighten(col, -0.06) }):Play()
+	end)
+	b.MouseButton1Up:Connect(function()
+		TweenService:Create(b, TweenInfo.new(0.08), { BackgroundColor3 = lighten(col, 0.10) }):Play()
+	end)
 	return b
 end
 
@@ -179,10 +204,22 @@ local inventoryLayer = mkOverlay("InventoryLayer")
 local shopLayer      = mkOverlay("ShopLayer")
 local questLayer     = mkOverlay("QuestLayer")
 local sectLayer      = mkOverlay("SectLayer")
+local worldLayer     = mkOverlay("WorldLayer")
 local SectData       = require(GameData:WaitForChild("SectData"))
+
+-- Teleport target for a realm zone (matches the NPCService spawn layout).
+local function realmZonePosition(realmId: number): Vector3
+	local realms = NPCData.GetImplementedRealms()
+	local rowIndex = 1
+	for i, r in ipairs(realms) do if r == realmId then rowIndex = i end end
+	local origin = Config.NPC_SPAWN_ORIGIN
+	local spread = Config.NPC_SPAWN_SPREAD
+	return origin + Vector3.new(spread * 4.5, 2, (rowIndex - 1) * spread - spread)
+end
 
 -- Vorwärts-Deklaration (Definition weiter unten bei den Button-Bindungen).
 local closeAllOverlays: () -> ()
+local showToast: (string, string?) -> ()
 
 -- ════════════════════════════════════════════════════════════
 -- ── HUD ──────────────────────────────────────────────────────
@@ -213,13 +250,13 @@ local hpFill  = mkBar(hpPanel, C.hp, UDim2.new(0,12,0,26), 16)
 local hpText  = mkLabel(hpPanel,"HP 0 / 0",UDim2.new(1,-24,0,18),UDim2.new(0,12,0,4),C.t1,13,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
 
 -- Technique cooldown bar (above HP panel)
-local techPanel = mkPanel("TechPanel", UDim2.new(0,380,0,34), UDim2.new(0.5,0,1,-130), Vector2.new(0.5,1), hudRoot)
-local techFill  = mkBar(techPanel, C.a1, UDim2.new(0,12,0,10), 10)
-local techLabel = mkLabel(techPanel,"[Q] Technik bereit",UDim2.new(1,-24,0,14),UDim2.new(0,12,0,0),C.t3,10,nil,Enum.TextXAlignment.Center)
+local techPanel = mkPanel("TechPanel", UDim2.new(0,380,0,34), UDim2.new(0.5,0,1,-150), Vector2.new(0.5,1), hudRoot)
+local techFill  = mkBar(techPanel, C.a1, UDim2.new(0,12,0,18), 8)
+local techLabel = mkLabel(techPanel,"[Q] Technique ready",UDim2.new(1,-24,0,14),UDim2.new(0,12,0,2),C.t3,10,nil,Enum.TextXAlignment.Center)
 
 local seclPanel = mkPanel("SeclPanel", UDim2.new(0,215,0,90), UDim2.new(0,14,1,-14), Vector2.new(0,1), hudRoot)
-local seclBtn   = mkButton(seclPanel,"🧘 Klausur betreten",UDim2.new(1,-16,0,36),UDim2.new(0,8,0,8),C.a1)
-local seclStatus = mkLabel(seclPanel,"Klausur: Inaktiv",UDim2.new(1,-16,0,16),UDim2.new(0,8,0,50),C.t3,11)
+local seclBtn   = mkButton(seclPanel,"🧘 Enter Seclusion",UDim2.new(1,-16,0,36),UDim2.new(0,8,0,8),C.a1)
+local seclStatus = mkLabel(seclPanel,"Seclusion: Inactive",UDim2.new(1,-16,0,16),UDim2.new(0,8,0,50),C.t3,11)
 local seclTimer  = mkLabel(seclPanel,"",UDim2.new(1,-16,0,16),UDim2.new(0,8,0,68),C.cyan,11,Enum.Font.GothamBold)
 
 -- Bottom-right buttons
@@ -227,9 +264,10 @@ local invBtn      = mkButton(hudRoot,"🎒",UDim2.new(0,46,0,46),UDim2.new(1,-14
 local shopBtn     = mkButton(hudRoot,"🏪",UDim2.new(0,46,0,46),UDim2.new(1,-66,1,-14),  C.bg4,Vector2.new(1,1))
 local questBtn    = mkButton(hudRoot,"📜",UDim2.new(0,46,0,46),UDim2.new(1,-118,1,-14), C.bg4,Vector2.new(1,1))
 local sectBtn     = mkButton(hudRoot,"🏯",UDim2.new(0,46,0,46),UDim2.new(1,-170,1,-14), C.bg4,Vector2.new(1,1))
+local worldBtn    = mkButton(hudRoot,"🌀",UDim2.new(0,46,0,46),UDim2.new(1,-222,1,-14), C.bg4,Vector2.new(1,1))
 local mainMenuBtn = mkButton(hudRoot,"≡", UDim2.new(0,38,0,38),UDim2.new(1,-14,0,14),   C.bg4,Vector2.new(1,0))
 
-local seclAbortBtn = mkButton(hudRoot,"⚠️ Klausur abbrechen (−30%)",
+local seclAbortBtn = mkButton(hudRoot,"⚠️ Cancel Seclusion (−30%)",
 	UDim2.new(0,240,0,36), UDim2.new(0,14,1,-68), C.hp, Vector2.new(0,1))
 seclAbortBtn.Visible = false
 
@@ -244,27 +282,27 @@ local seclYearsValue = 1
 local spinnerRow = Instance.new("Frame"); spinnerRow.Size = UDim2.new(1,-20,0,36)
 spinnerRow.Position = UDim2.new(0,10,0,40); spinnerRow.BackgroundTransparency=1; spinnerRow.Parent = seclPopup
 local yearMinusBtn = mkButton(spinnerRow,"−",UDim2.new(0,36,0,36),UDim2.fromOffset(0,0),C.bg5)
-local yearLabel    = mkLabel(spinnerRow,"1 Jahr",UDim2.new(1,-80,1,0),UDim2.fromOffset(42,0),C.t1,16,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+local yearLabel    = mkLabel(spinnerRow,"1 Year",UDim2.new(1,-80,1,0),UDim2.fromOffset(42,0),C.t1,16,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
 yearLabel.TextYAlignment = Enum.TextYAlignment.Center
 local yearPlusBtn  = mkButton(spinnerRow,"＋",UDim2.new(0,36,0,36),UDim2.new(1,-36,0,0),C.bg5)
 local seclPreviewEXP    = mkLabel(seclPopup,"⚡ EXP: —",      UDim2.new(1,-20,0,16),UDim2.new(0,10,0,88), C.exp,12)
 local seclPreviewStones = mkLabel(seclPopup,"💰 Stones: —",   UDim2.new(1,-20,0,16),UDim2.new(0,10,0,108),C.gold,12)
-local seclPreviewAge    = mkLabel(seclPopup,"⏳ Altert um: —", UDim2.new(1,-20,0,16),UDim2.new(0,10,0,128),C.warn,12)
-local seclPreviewTime   = mkLabel(seclPopup,"🕑 Echtzeit: —",  UDim2.new(1,-20,0,16),UDim2.new(0,10,0,148),C.t2,12)
-local seclConfirmBtn    = mkButton(seclPopup,"✓ Klausur starten",UDim2.new(1,-20,0,36),UDim2.new(0,10,1,-46),C.green)
-local seclCancelPopup   = mkButton(seclPopup,"✕ Abbrechen",      UDim2.new(1,-20,0,20),UDim2.new(0,10,1,-22),C.bg4)
+local seclPreviewAge    = mkLabel(seclPopup,"⏳ Ages by: —", UDim2.new(1,-20,0,16),UDim2.new(0,10,0,128),C.warn,12)
+local seclPreviewTime   = mkLabel(seclPopup,"🕑 Real time: —",  UDim2.new(1,-20,0,16),UDim2.new(0,10,0,148),C.t2,12)
+local seclConfirmBtn    = mkButton(seclPopup,"✓ Start Seclusion",UDim2.new(1,-20,0,36),UDim2.new(0,10,1,-46),C.green)
+local seclCancelPopup   = mkButton(seclPopup,"✕ Cancel",      UDim2.new(1,-20,0,20),UDim2.new(0,10,1,-22),C.bg4)
 
 -- ════════════════════════════════════════════════════════════
 -- ── Main Menu overlay
 -- ════════════════════════════════════════════════════════════
 local mainMenuCard = mkPanel("Card",UDim2.new(0,320,0,240),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), mainMenuLayer)
-mkLabel(mainMenuCard,"HAUPTMENÜ",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,16),C.gold,20,Enum.Font.GothamBlack,Enum.TextXAlignment.Center)
+mkLabel(mainMenuCard,"MAIN MENU",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,16),C.gold,20,Enum.Font.GothamBlack,Enum.TextXAlignment.Center)
 local closeMainMenu = mkButton(mainMenuCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5); closeMainMenu.TextSize = 16
 local mmItems = {
-	{ text="📖 Providence ansehen", y=56 },
+	{ text="📖 View Providence", y=56 },
 	{ text="🏪 Shop",               y=104 },
 	{ text="📜 Quests",             y=152 },
-	{ text="🔄 Spiel verlassen",    y=200 },
+	{ text="🔄 Leave Game",    y=200 },
 }
 local mmButtons: { TextButton } = {}
 for _, item in ipairs(mmItems) do
@@ -276,14 +314,92 @@ end
 -- ════════════════════════════════════════════════════════════
 -- ── Inventory overlay
 -- ════════════════════════════════════════════════════════════
-local invCard = mkPanel("InvCard",UDim2.new(0,540,0,480),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), inventoryLayer)
-mkLabel(invCard,"🎒  INVENTAR",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
+local invCard = mkPanel("InvCard",UDim2.new(0,720,0,500),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), inventoryLayer)
+mkLabel(invCard,"🎒  INVENTORY & EQUIPMENT",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
 local closeInv = mkButton(invCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
 
-local invList, _ = mkScrollList(invCard, UDim2.new(1,-20,1,-60), UDim2.fromOffset(10,52))
+-- ── Left: character paperdoll ───────────────────────────────
+local dollPanel = Instance.new("Frame")
+dollPanel.Size = UDim2.new(0,300,1,-60); dollPanel.Position = UDim2.fromOffset(12,50)
+dollPanel.BackgroundColor3 = C.bg3; dollPanel.BorderSizePixel = 0
+corner(dollPanel,8); stroke(dollPanel,C.border); dollPanel.Parent = invCard
+mkLabel(dollPanel,"EQUIPMENT",UDim2.new(1,-20,0,16),UDim2.fromOffset(12,8),C.t3,11,Enum.Font.GothamBold)
+
+-- Simple character silhouette in the centre
+local charBody = Instance.new("Frame")
+charBody.Size = UDim2.fromOffset(70,150); charBody.Position = UDim2.new(0.5,0,0,40)
+charBody.AnchorPoint = Vector2.new(0.5,0); charBody.BackgroundColor3 = C.bg5
+charBody.BorderSizePixel = 0; corner(charBody,10); stroke(charBody, C.a1); charBody.Parent = dollPanel
+mkLabel(charBody,"🧍",UDim2.fromScale(1,1),UDim2.fromOffset(0,0),C.t2,46,nil,Enum.TextXAlignment.Center).TextYAlignment = Enum.TextYAlignment.Center
+
+-- Slot definitions: label + position around the silhouette
+local SLOT_DEFS = {
+	{ slot="head",     icon="⛑️", name="Head",     pos=UDim2.new(0.5,-35,0,40) },
+	{ slot="necklace", icon="📿", name="Necklace", pos=UDim2.new(0.5,-35,0,90) },
+	{ slot="body",     icon="🥋", name="Body",     pos=UDim2.new(0,16,0,140) },
+	{ slot="weapon",   icon="⚔️", name="Weapon",   pos=UDim2.new(1,-76,0,140) },
+	{ slot="ring",     icon="💍", name="Ring",     pos=UDim2.new(1,-76,0,196) },
+	{ slot="legs",     icon="👖", name="Legs",     pos=UDim2.new(0,16,0,196) },
+	{ slot="feet",     icon="🥾", name="Feet",     pos=UDim2.new(0.5,-35,0,250) },
+}
+local slotFrames: { [string]: { frame: Frame, label: TextLabel } } = {}
+local equipState: { [string]: number? } = {}
+
+local unequipRemote = Net.Event("UnequipItem")
+for _, def in ipairs(SLOT_DEFS) do
+	local sf = Instance.new("TextButton")
+	sf.Size = UDim2.fromOffset(60,60); sf.Position = def.pos
+	sf.BackgroundColor3 = C.bg4; sf.BorderSizePixel = 0; sf.AutoButtonColor = false
+	sf.Text = ""; corner(sf,8); stroke(sf,C.border); sf.Parent = dollPanel
+	local ic = mkLabel(sf, def.icon, UDim2.new(1,0,0,28), UDim2.fromOffset(0,6), C.t3, 20, nil, Enum.TextXAlignment.Center)
+	ic.TextYAlignment = Enum.TextYAlignment.Center
+	local nm = mkLabel(sf, def.name, UDim2.new(1,0,0,14), UDim2.fromOffset(0,40), C.t3, 9, nil, Enum.TextXAlignment.Center)
+	local thisSlot = def.slot
+	sf.MouseButton1Click:Connect(function()
+		if equipState[thisSlot] then unequipRemote:FireServer(thisSlot) end
+	end)
+	sf.MouseEnter:Connect(function() sf.BackgroundColor3 = C.bg5 end)
+	sf.MouseLeave:Connect(function() sf.BackgroundColor3 = C.bg4 end)
+	slotFrames[def.slot] = { frame = sf, label = nm }
+	_ = ic
+end
+
+local function rebuildEquipment(equipment: { [string]: number? })
+	for slot, data in pairs(slotFrames) do
+		local itemId = equipment[slot]
+		equipState[slot] = itemId
+		local item = itemId and ItemData.GetItem(itemId)
+		if item then
+			local rar = RARITY[item.rarity] or C.gold
+			data.frame.Text = item.icon
+			data.frame.TextColor3 = rar
+			data.frame.TextScaled = false
+			data.frame.Font = Enum.Font.GothamBold
+			data.frame.TextSize = 22
+			(data.frame :: any).TextYAlignment = Enum.TextYAlignment.Center
+			data.label.Text = item.name
+			data.label.TextColor3 = rar
+			local st = data.frame:FindFirstChildOfClass("UIStroke"); if st then st.Color = rar end
+		else
+			-- restore empty look
+			for _, def in ipairs(SLOT_DEFS) do
+				if def.slot == slot then
+					data.frame.Text = def.icon
+					data.frame.TextColor3 = C.t3
+					data.frame.TextSize = 20
+					data.label.Text = def.name
+					data.label.TextColor3 = C.t3
+					local st = data.frame:FindFirstChildOfClass("UIStroke"); if st then st.Color = C.border end
+				end
+			end
+		end
+	end
+end
+
+-- ── Right: scrollable item list ─────────────────────────────
+local invList, _ = mkScrollList(invCard, UDim2.new(1,-336,1,-60), UDim2.fromOffset(324,50))
 
 local function rebuildInventory(inventory: {[any]: any})
-	-- Clear existing
 	for _, c in ipairs(invList:GetChildren()) do
 		if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end
 	end
@@ -302,69 +418,78 @@ local function rebuildInventory(inventory: {[any]: any})
 		row.Parent = invList
 
 		local rarCol = RARITY[item.rarity] or C.t1
-		mkLabel(row, item.icon .. "  " .. item.name, UDim2.new(0.6,0,0,22), UDim2.fromOffset(8,6), rarCol, 13, Enum.Font.GothamBold)
-		mkLabel(row, item.rarity, UDim2.new(0.3,0,0,16), UDim2.fromOffset(8,28), rarCol, 10)
-		mkLabel(row, "×" .. tostring(count), UDim2.new(0,40,0,22), UDim2.new(0.6,0,0,6), C.t2, 14, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+		mkLabel(row, item.icon .. "  " .. item.name, UDim2.new(1,-110,0,20), UDim2.fromOffset(8,6), rarCol, 12, Enum.Font.GothamBold)
+		mkLabel(row, ("%s · ×%d"):format(item.rarity, count), UDim2.new(1,-110,0,16), UDim2.fromOffset(8,28), C.t3, 10)
 
+		local thisId = itemId
 		if ItemData.IsUsable(item) then
-			local useBtn = mkButton(row, "Verwenden", UDim2.new(0,90,0,28), UDim2.new(1,-98,0,12), C.green)
+			local useBtn = mkButton(row, "Use", UDim2.new(0,90,0,30), UDim2.new(1,-98,0.5,-15), C.green)
 			useBtn.TextSize = 12
-			local thisId = itemId
-			useBtn.MouseButton1Click:Connect(function()
-				Net.Event("UseItem"):FireServer(thisId)
-			end)
+			useBtn.MouseButton1Click:Connect(function() Net.Event("UseItem"):FireServer(thisId) end)
+		elseif ItemData.IsEquippable(item) then
+			local eqBtn = mkButton(row, "Equip", UDim2.new(0,90,0,30), UDim2.new(1,-98,0.5,-15), C.a1)
+			eqBtn.TextSize = 12
+			eqBtn.MouseButton1Click:Connect(function() Net.Event("EquipItem"):FireServer(thisId) end)
 		else
-			mkLabel(row, item.itype, UDim2.new(0,90,0,20), UDim2.new(1,-98,0,16), C.t3, 10, nil, Enum.TextXAlignment.Center)
+			mkLabel(row, item.itype, UDim2.new(0,90,0,20), UDim2.new(1,-98,0.5,-10), C.t3, 10, nil, Enum.TextXAlignment.Center)
 		end
 	end
 
 	if not hasItems then
 		local empty = Instance.new("TextLabel")
 		empty.Size = UDim2.new(1,0,0,40); empty.BackgroundTransparency = 1
-		empty.Text = "— Inventar leer —"; empty.TextColor3 = C.t3
+		empty.Text = "— Inventory empty —"; empty.TextColor3 = C.t3
 		empty.TextSize = 13; empty.Font = Enum.Font.Gotham
 		empty.TextXAlignment = Enum.TextXAlignment.Center
 		empty.Parent = invList
 	end
 end
 
+Net.Event("EquipmentSync").OnClientEvent:Connect(function(equipment: any)
+	rebuildEquipment(equipment)
+end)
+
 -- ════════════════════════════════════════════════════════════
 -- ── Shop overlay
 -- ════════════════════════════════════════════════════════════
-local shopCard = mkPanel("ShopCard",UDim2.new(0,560,0,500),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), shopLayer)
-mkLabel(shopCard,"🏪  SHOP — Spirit Stone Händler",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
+local shopCard = mkPanel("ShopCard",UDim2.new(0,580,0,520),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), shopLayer)
+mkLabel(shopCard,"🏪  SHOP — Spirit Stone Merchant",UDim2.new(1,-200,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
 local closeShop = mkButton(shopCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
-local shopStoneL = mkLabel(shopCard,"💰 —",UDim2.new(0,160,0,20),UDim2.new(1,-180,0,20),C.gold,13,Enum.Font.GothamBold,Enum.TextXAlignment.Right)
+local shopStoneL = mkLabel(shopCard,"💰 —",UDim2.new(0,160,0,20),UDim2.new(1,-180,0,12),C.gold,13,Enum.Font.GothamBold,Enum.TextXAlignment.Right)
+local shopRealmL = mkLabel(shopCard,"",UDim2.new(0,160,0,16),UDim2.new(1,-180,0,32),C.t3,10,nil,Enum.TextXAlignment.Right)
 
 local shopList, _ = mkScrollList(shopCard, UDim2.new(1,-20,1,-68), UDim2.fromOffset(10,60))
 
--- Build shop items once
-task.spawn(function()
-	task.wait(0.1) -- wait for ItemData to be ready
+-- Rebuild the shop catalogue for the player's current realm (items unlock
+-- progressively, so the stock scales with cultivation level).
+local function rebuildShop()
+	for _, c in ipairs(shopList:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	local realm = (player:GetAttribute("Realm") or 1) :: number
+	local realmName = player:GetAttribute("RealmName") or "?"
+	shopRealmL.Text = ("Realm %d · %s"):format(realm, realmName)
+
 	local buyRemote = Net.Event("BuyItem")
-	local order = 0
-	for _, item in ipairs(ItemData.ITEMS) do
-		if not ItemData.IsBuyable(item) then continue end
-		if item.itype ~= "consumable" and item.itype ~= "scroll" then continue end
-		order += 1
+	local catalog = ItemData.CatalogForRealm(realm)
+	for order, item in ipairs(catalog) do
 		local row = Instance.new("Frame"); row.LayoutOrder = order
 		row.Size = UDim2.new(1,0,0,56); row.BackgroundColor3 = C.bg3
 		row.BorderSizePixel = 0; corner(row,6); stroke(row,C.border)
 		row.Parent = shopList
 
 		local rarCol = RARITY[item.rarity] or C.t1
-		mkLabel(row, item.icon .. "  " .. item.name, UDim2.new(0.55,0,0,22), UDim2.fromOffset(8,4), rarCol, 13, Enum.Font.GothamBold)
-		mkLabel(row, item.desc, UDim2.new(0.7,0,0,14), UDim2.fromOffset(8,28), C.t3, 10)
-		mkLabel(row, "💰 " .. tostring(item.cost), UDim2.new(0,80,0,20), UDim2.new(0.7,-8,0,6), C.gold, 13, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+		local tag = item.itype == "equipment" and ("  [%s]"):format(item.slot or "gear") or ""
+		mkLabel(row, item.icon .. "  " .. item.name .. tag, UDim2.new(1,-95,0,20), UDim2.fromOffset(8,4), rarCol, 12, Enum.Font.GothamBold)
+		mkLabel(row, item.desc, UDim2.new(1,-180,0,28), UDim2.fromOffset(8,26), C.t3, 10).TextWrapped = true
+		mkLabel(row, "💰 " .. fmt(item.cost), UDim2.new(0,90,0,18), UDim2.new(1,-98,0,6), C.gold, 12, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
 
-		local buyBtn = mkButton(row,"Kaufen",UDim2.new(0,70,0,32),UDim2.new(1,-78,0,12),C.a1)
+		local buyBtn = mkButton(row,"Buy",UDim2.new(0,82,0,28),UDim2.new(1,-90,0,26),C.a1)
 		buyBtn.TextSize = 12
 		local thisId = item.id
-		buyBtn.MouseButton1Click:Connect(function()
-			buyRemote:FireServer(thisId)
-		end)
+		buyBtn.MouseButton1Click:Connect(function() buyRemote:FireServer(thisId) end)
 	end
-end)
+end
 
 -- ════════════════════════════════════════════════════════════
 -- ── Quest overlay
@@ -399,33 +524,37 @@ local function rebuildQuests()
 		local qs = questState[q.id] or { complete = false, claimed = false }
 
 		local row = Instance.new("Frame"); row.LayoutOrder = order
-		row.Size = UDim2.new(1,0,0,60); row.BorderSizePixel = 0
+		row.Size = UDim2.new(1,0,0,64); row.BorderSizePixel = 0
 		row.BackgroundColor3 = qs.claimed and C.bg3 or (qs.complete and Color3.fromHex("0D1F16") or C.bg3)
 		corner(row,6); stroke(row, qs.complete and (qs.claimed and C.border or C.green) or C.border)
 		row.Parent = questList
 
+		-- Left text block (leaves 110px on the right for the action button)
 		local qtypeCol = QTYPE_COLOR[q.qtype] or C.t2
-		mkLabel(row, q.qtype, UDim2.new(0,80,0,14), UDim2.fromOffset(8,4), qtypeCol, 9, Enum.Font.GothamBold)
-		mkLabel(row, q.name, UDim2.new(0.55,0,0,20), UDim2.fromOffset(8,18), C.t1, 13, Enum.Font.GothamBold)
-		mkLabel(row, reqText(q), UDim2.new(0.5,0,0,14), UDim2.fromOffset(8,40), C.t3, 10)
+		mkLabel(row, q.qtype, UDim2.new(1,-120,0,14), UDim2.fromOffset(10,5), qtypeCol, 9, Enum.Font.GothamBold)
+		mkLabel(row, q.name, UDim2.new(1,-120,0,20), UDim2.fromOffset(10,19), C.t1, 13, Enum.Font.GothamBold)
 
-		-- Rewards
+		-- Combined requirement + reward on one line (no overlap with button)
 		local rewStr = ""
-		if q.rewardExp > 0 then rewStr = rewStr .. "+EXP " end
-		if q.rewardStones > 0 then rewStr = rewStr .. "💰" .. fmt(q.rewardStones) end
-		mkLabel(row, rewStr, UDim2.new(0.3,0,0,16), UDim2.new(0.65,0,0,10), C.gold, 11, nil, Enum.TextXAlignment.Right)
+		if q.rewardExp > 0 then rewStr = "+" .. fmt(q.rewardExp) .. " EXP" end
+		if q.rewardStones > 0 then
+			rewStr = rewStr .. (rewStr ~= "" and " · " or "") .. "💰" .. fmt(q.rewardStones)
+		end
+		local botLine = reqText(q) .. (rewStr ~= "" and ("   →   " .. rewStr) or "")
+		mkLabel(row, botLine, UDim2.new(1,-120,0,14), UDim2.fromOffset(10,42), C.t3, 10)
 
+		-- Right-side action (vertically centred, fixed 96px column)
 		if qs.claimed then
-			mkLabel(row,"✓ Abgeholt",UDim2.new(0,88,0,28),UDim2.new(1,-96,0,16),C.t3,11,nil,Enum.TextXAlignment.Center)
+			mkLabel(row,"✓ Claimed",UDim2.new(0,96,0,28),UDim2.new(1,-104,0.5,-14),C.t3,11,nil,Enum.TextXAlignment.Center)
 		elseif qs.complete then
-			local claimBtn = mkButton(row,"Abholen",UDim2.new(0,88,0,28),UDim2.new(1,-96,0,16),C.green)
+			local claimBtn = mkButton(row,"Claim",UDim2.new(0,96,0,30),UDim2.new(1,-104,0.5,-15),C.green)
 			claimBtn.TextSize = 12
 			local thisId = q.id
 			claimBtn.MouseButton1Click:Connect(function()
 				claimRemote:FireServer(thisId)
 			end)
 		else
-			mkLabel(row,"⏳ Offen",UDim2.new(0,88,0,28),UDim2.new(1,-96,0,16),C.t3,11,nil,Enum.TextXAlignment.Center)
+			mkLabel(row,"⏳ Locked",UDim2.new(0,96,0,28),UDim2.new(1,-104,0.5,-14),C.t3,11,nil,Enum.TextXAlignment.Center)
 		end
 	end
 end
@@ -445,7 +574,7 @@ end)
 local sectCard = mkPanel("SectCard",UDim2.new(0,580,0,520),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), sectLayer)
 mkLabel(sectCard,"🏯  HIDDEN SECTS",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
 local closeSect = mkButton(sectCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
-local sectStatusL = mkLabel(sectCard,"Keine Sekte beigetreten",UDim2.new(1,-30,0,18),UDim2.fromOffset(15,40),C.t2,12)
+local sectStatusL = mkLabel(sectCard,"No sect joined",UDim2.new(1,-30,0,18),UDim2.fromOffset(15,40),C.t2,12)
 
 local sectList, _ = mkScrollList(sectCard, UDim2.new(1,-20,1,-72), UDim2.fromOffset(10,64))
 
@@ -470,7 +599,7 @@ local function rebuildSects()
 
 		mkLabel(row, sect.icon .. "  " .. sect.name, UDim2.new(0.7,0,0,20), UDim2.fromOffset(10,8), C.t1, 14, Enum.Font.GothamBold)
 		mkLabel(row, sect.desc, UDim2.new(1,-20,0,28), UDim2.fromOffset(10,30), C.t3, 11)
-		mkLabel(row, ("Realm %d erforderlich · Max Level %d"):format(sect.reqRealm, sect.maxLevel),
+		mkLabel(row, ("Realm %d required · Max Level %d"):format(sect.reqRealm, sect.maxLevel),
 			UDim2.new(1,-20,0,14), UDim2.fromOffset(10,60), C.t2, 10)
 
 		-- Milestone preview
@@ -481,15 +610,15 @@ local function rebuildSects()
 		mkLabel(row, table.concat(msParts, "  ·  "), UDim2.new(1,-20,0,14), UDim2.fromOffset(10,76), C.a1, 9)
 
 		if joined then
-			mkLabel(row, ("✓ Beigetreten — Level %d"):format(currentSectLevel),
+			mkLabel(row, ("✓ Joined — Level %d"):format(currentSectLevel),
 				UDim2.new(0,200,0,28), UDim2.new(0,10,0,90), C.gold, 12, Enum.Font.GothamBold)
 		elseif playerRealm >= sect.reqRealm then
-			local joinBtn = mkButton(row,"Beitreten",UDim2.new(0,110,0,30),UDim2.new(1,-120,0,82),C.a1)
+			local joinBtn = mkButton(row,"Join",UDim2.new(0,110,0,30),UDim2.new(1,-120,0,82),C.a1)
 			joinBtn.TextSize = 12
 			local thisId = sect.id
 			joinBtn.MouseButton1Click:Connect(function() joinSectRemote:FireServer(thisId) end)
 		else
-			mkLabel(row, ("🔒 Realm %d nötig"):format(sect.reqRealm),
+			mkLabel(row, ("🔒 Realm %d needed"):format(sect.reqRealm),
 				UDim2.new(0,140,0,28), UDim2.new(1,-150,0,90), C.t3, 11, nil, Enum.TextXAlignment.Center)
 		end
 	end
@@ -499,16 +628,67 @@ Net.Event("SectSync").OnClientEvent:Connect(function(data: any)
 	currentSectId = data.sectId
 	currentSectLevel = data.level or 0
 	if data.sectName then
-		sectStatusL.Text = ("Sekte: %s · Level %d · %s (EXP %d/%d)"):format(
+		sectStatusL.Text = ("Sect: %s · Level %d · %s (EXP %d/%d)"):format(
 			data.sectName, data.level or 0, data.buffName or "—",
 			math.floor(data.exp or 0), math.floor(data.expNeeded or 0))
 		sectStatusL.TextColor3 = C.gold
 	else
-		sectStatusL.Text = "Keine Sekte beigetreten"
+		sectStatusL.Text = "No sect joined"
 		sectStatusL.TextColor3 = C.t2
 	end
 	if sectLayer.Visible then rebuildSects() end
 end)
+
+-- ════════════════════════════════════════════════════════════
+-- ── World / Teleport overlay
+-- ════════════════════════════════════════════════════════════
+local worldCard = mkPanel("WorldCard",UDim2.new(0,560,0,520),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), worldLayer)
+mkLabel(worldCard,"🌀  WORLDS — Teleport",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
+local closeWorld = mkButton(worldCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
+mkLabel(worldCard,"Travel between cultivation realms. Higher realms hold deadlier foes.",
+	UDim2.new(1,-30,0,16),UDim2.fromOffset(15,40),C.t3,11)
+
+local worldList, _ = mkScrollList(worldCard, UDim2.new(1,-20,1,-66), UDim2.fromOffset(10,58))
+
+local function doTeleport(realmId: number)
+	local char = player.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not root then return end
+	root.CFrame = CFrame.new(realmZonePosition(realmId) + Vector3.new(0, 3, 0))
+	worldLayer.Visible = false
+	local realm = CultivationData.GetRealm(realmId)
+	showToast(("🌀 Teleported to %s (Realm %d)"):format(realm and realm.name or "?", realmId), "info")
+end
+
+local function rebuildWorlds()
+	for _, c in ipairs(worldList:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	local playerRealm = (player:GetAttribute("Realm") or 1) :: number
+	local realms = NPCData.GetImplementedRealms()
+	for order, realmId in ipairs(realms) do
+		local realm = CultivationData.GetRealm(realmId)
+		local row = Instance.new("Frame"); row.LayoutOrder = order
+		row.Size = UDim2.new(1,0,0,56); row.BorderSizePixel = 0
+		row.BackgroundColor3 = realmId == playerRealm and Color3.fromHex("121E2E") or C.bg3
+		corner(row,6); stroke(row, realmId == playerRealm and C.gold or C.border)
+		row.Parent = worldList
+
+		local col = realm and Color3.fromHex(realm.color or "60A5FA") or C.t1
+		mkLabel(row, ("Realm %d — %s"):format(realmId, realm and realm.name or "?"),
+			UDim2.new(1,-130,0,22), UDim2.fromOffset(10,6), col, 14, Enum.Font.GothamBold)
+		mkLabel(row, ("%s Tier · 10 foes%s"):format(realm and realm.tier or "?",
+			realmId == playerRealm and "  · YOU ARE HERE" or ""),
+			UDim2.new(1,-130,0,16), UDim2.fromOffset(10,30), C.t3, 10)
+
+		local danger = realmId > playerRealm
+		local tpBtn = mkButton(row, danger and "⚠ Travel" or "Travel",
+			UDim2.new(0,100,0,30), UDim2.new(1,-110,0.5,-15), danger and C.warn or C.a1)
+		tpBtn.TextSize = 12
+		local thisRealm = realmId
+		tpBtn.MouseButton1Click:Connect(function() doTeleport(thisRealm) end)
+	end
+end
 
 -- ════════════════════════════════════════════════════════════
 -- ── Heaven Tribulation overlay
@@ -527,7 +707,7 @@ tribName.ZIndex = 41
 local tribWaveL = mkLabel(tribLayer,"",UDim2.new(1,0,0,24),UDim2.fromScale(0,0.45),
 	C.t1,16,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
 tribWaveL.ZIndex = 41
-local tribHint = mkLabel(tribLayer,"Überlebe alle Wellen! Nutze Heil-Pillen [I] zum Heilen.",
+local tribHint = mkLabel(tribLayer,"Survive every wave! Use healing pills [I] to recover.",
 	UDim2.new(1,0,0,20),UDim2.fromScale(0,0.52),C.t2,13,nil,Enum.TextXAlignment.Center)
 tribHint.ZIndex = 41
 
@@ -542,21 +722,21 @@ end
 Net.Event("TribulationStarted").OnClientEvent:Connect(function(name: string, waves: number)
 	tribLayer.Visible = true
 	tribName.Text = name
-	tribWaveL.Text = ("Welle 0 / %d"):format(waves)
+	tribWaveL.Text = ("Wave 0 / %d"):format(waves)
 	closeAllOverlays()
 end)
 
 Net.Event("TribulationWave").OnClientEvent:Connect(function(wave: number, waves: number, dmg: number)
-	tribWaveL.Text = ("Welle %d / %d   (−%s HP)"):format(wave, waves, fmt(dmg))
+	tribWaveL.Text = ("Wave %d / %d   (−%s HP)"):format(wave, waves, fmt(dmg))
 	flashLightning()
 end)
 
 Net.Event("TribulationEnded").OnClientEvent:Connect(function(success: boolean)
 	tribLayer.Visible = false
 	if success then
-		showToast("✨ Tribulation überstanden — Durchbruch!", "gold")
+		showToast("✨ Tribulation survived — Breakthrough!", "gold")
 	else
-		showToast("💀 Tribulation gescheitert! Heile dich und brich erneut durch.", "warn")
+		showToast("💀 Tribulation failed! Heal up and break through again.", "warn")
 	end
 end)
 
@@ -570,7 +750,7 @@ mContainer.AnchorPoint = Vector2.new(0.5, 0.5)
 mContainer.BackgroundTransparency = 1
 mContainer.Parent = menuRoot
 
-mkLabel(mContainer,"🎲  PROVIDENCE — Würfle dein Schicksal",
+mkLabel(mContainer,"🎲  PROVIDENCE — Roll Your Fate",
 	UDim2.new(1,0,0,32), UDim2.fromOffset(0,0), C.gold, 24, Enum.Font.GothamBlack, Enum.TextXAlignment.Center)
 mkLabel(mContainer,"Diese 4 Attribute bestimmen dein gesamtes Leben. Du startest mit Alter 18.",
 	UDim2.new(1,0,0,18), UDim2.fromOffset(0,36), C.t2, 13, nil, Enum.TextXAlignment.Center)
@@ -601,7 +781,7 @@ for i, attrName in ipairs(ATTR_ORDER) do
 	attrBlocks[attrName] = { nameLabel=nameL, subLabel=subL, prosLabel=prosL, consLabel=consL, rerollBtn=rerollBtn }
 end
 
-local confirmBtn = mkButton(scrollLeft,"✓ Providence bestätigen & Spiel beginnen",UDim2.new(1,0,0,50),UDim2.fromOffset(0,0),C.green)
+local confirmBtn = mkButton(scrollLeft,"✓ Confirm Providence & Begin",UDim2.new(1,0,0,50),UDim2.fromOffset(0,0),C.green)
 confirmBtn.LayoutOrder = 10; confirmBtn.TextSize = 16; confirmBtn.Font = Enum.Font.GothamBold
 
 local infoCard = mkPanel("InfoCard", UDim2.new(0.54,0,1,-68), UDim2.new(0.46,0,0,62), Vector2.new(0,0), mContainer)
@@ -621,13 +801,15 @@ local function infoRow(text: string, col: Color3, ts: number, font: Enum.Font?, 
 	r.Parent=scrollR
 end
 
-infoRow("🌟  APTITUDE — EXP-Multiplikator",C.gold,14,Enum.Font.GothamBold)
+infoRow("🌟  APTITUDE — Talent (pros & cons)",C.gold,14,Enum.Font.GothamBold)
 for _, g in ipairs(AptitudeData.GRADES) do
 	local col = RARITY[g.rarity] or C.t1
-	infoRow(('<b>%s</b>  ×%.1f  <font color="#5C6488">%.1f%%</font>'):format(g.name,g.mult,g.chance),col,12)
+	infoRow(('<b>%s</b>  <font color="#5C6488">%.1f%%</font>'):format(g.name,g.chance),col,12)
+	infoRow('<font color="#34D399">✓ ' .. (g.pros or "") .. '</font>', C.green, 11)
+	infoRow('<font color="#F87171">✗ ' .. (g.cons or "") .. '</font>', C.hp, 11)
 end
 
-infoRow("💪  PHYSIQUE — Körper-Typ",C.gold,14,Enum.Font.GothamBold,10)
+infoRow("💪  PHYSIQUE — Body type",C.gold,14,Enum.Font.GothamBold,10)
 for _, p in ipairs(ProvidenceData.PHYSIQUES) do
 	infoRow(('<b><font color="#%s">%s</font></b>  <font color="#5C6488">%s  %.0f%%</font>'):format(p.color,p.name,p.role,p.chance), Color3.fromHex(p.color),12)
 	infoRow('<font color="#34D399">✓ ' .. p.pros .. '</font>', C.green, 11)
@@ -658,7 +840,7 @@ local toastLayout=Instance.new("UIListLayout"); toastLayout.Padding=UDim.new(0,5
 toastLayout.HorizontalAlignment=Enum.HorizontalAlignment.Center; toastLayout.Parent=toastHolder
 
 local toastColors = { good=C.green, warn=C.hp, gold=C.gold, info=C.a1 }
-local function showToast(message: string, kind: string?)
+function showToast(message: string, kind: string?)
 	local t = Instance.new("TextLabel")
 	t.Size=UDim2.new(0,440,0,34); t.BackgroundColor3=C.bg3
 	t.Text=message; t.TextColor3=toastColors[kind or "info"] or C.t1
@@ -763,7 +945,7 @@ task.spawn(function()
 				remaining)
 		else
 			techFill.Size = UDim2.fromScale(1, 1)
-			techLabel.Text = "[Q] Technik bereit"
+			techLabel.Text = "[Q] Technique ready"
 		end
 	end
 end)
@@ -787,9 +969,9 @@ bindAttr("InSeclusion", function(v)
 	seclAbortBtn.Visible = inSeclusionLocal
 	seclPopup.Visible    = false
 	if inSeclusionLocal then
-		seclStatus.Text = "🧘 In Klausur"; seclStatus.TextColor3 = C.cyan
+		seclStatus.Text = "🧘 In Seclusion"; seclStatus.TextColor3 = C.cyan
 	else
-		seclStatus.Text = "Klausur: Inaktiv"; seclStatus.TextColor3 = C.t3
+		seclStatus.Text = "Seclusion: Inactive"; seclStatus.TextColor3 = C.t3
 		seclTimer.Text = ""; seclusionCountdown = 0
 	end
 end)
@@ -802,11 +984,11 @@ end
 
 local function updateSeclPreview()
 	local years = seclYearsValue
-	yearLabel.Text = years == 1 and "1 Jahr" or (tostring(years) .. " Jahre")
-	seclPreviewEXP.Text    = ("⚡ EXP: ~%d Stufen-Fortschritte"):format(years * 3)
+	yearLabel.Text = years == 1 and "1 Year" or (tostring(years) .. " Years")
+	seclPreviewEXP.Text    = ("⚡ EXP: ~%d stage gains"):format(years * 3)
 	seclPreviewStones.Text = ("💰 Stones: +%d"):format(years * 80)
-	seclPreviewAge.Text    = ("⏳ Altert um: %d %s"):format(years, years==1 and "Jahr" or "Jahre")
-	seclPreviewTime.Text   = ("🕑 Echtzeit: ~%d Min."):format(math.ceil(years * 120 / 60))
+	seclPreviewAge.Text    = ("⏳ Ages by: %d %s"):format(years, years==1 and "Year" or "Years")
+	seclPreviewTime.Text   = ("🕑 Real time: ~%d min"):format(math.ceil(years * 120 / 60))
 end
 
 seclBtn.MouseButton1Click:Connect(function()
@@ -824,12 +1006,12 @@ seclAbortBtn.MouseButton1Click:Connect(function() cancelSeclusionRemote:FireServ
 
 Net.Event("SeclusionStarted").OnClientEvent:Connect(function(durationSec: number, years: number)
 	seclusionCountdown = durationSec
-	seclStatus.Text = ("🧘 Klausur: %d %s"):format(years, years==1 and "Jahr" or "Jahre")
+	seclStatus.Text = ("🧘 Seclusion: %d %s"):format(years, years==1 and "Year" or "Years")
 end)
 
 Net.Event("SeclusionFinished").OnClientEvent:Connect(function(expGained: number, stonesGained: number, years: number, canceled: boolean)
 	local prefix = canceled and "⚠️ Abgebrochen" or "✅ Abgeschlossen"
-	showToast(("%s — +%d EXP, +%d Stones, +%d Jahre"):format(prefix, expGained, stonesGained, years), canceled and "warn" or "gold")
+	showToast(("%s — +%d EXP, +%d Stones, +%d Years"):format(prefix, expGained, stonesGained, years), canceled and "warn" or "gold")
 end)
 
 task.spawn(function()
@@ -837,7 +1019,7 @@ task.spawn(function()
 		task.wait(1)
 		if seclusionCountdown > 0 then
 			seclusionCountdown -= 1
-			seclTimer.Text = "⏱ " .. formatTime(seclusionCountdown) .. " verbleibend"
+			seclTimer.Text = "⏱ " .. formatTime(seclusionCountdown) .. " remaining"
 		end
 	end
 end)
@@ -859,8 +1041,9 @@ local function updateAttrBlock(attrName: string)
 		local v = player:GetAttribute("Aptitude") :: string?
 		local g = v and AptitudeData.GetByName(v)
 		block.nameLabel.Text = v or "—"; block.nameLabel.TextColor3 = (g and RARITY[g.rarity]) or C.t1
-		block.subLabel.Text = g and ("EXP ×%.1f  |  %s  |  %.1f%% Chance"):format(g.mult, g.rarity, g.chance) or "—"
-		block.prosLabel.Text = g and g.desc or ""; block.consLabel.Text = ""
+		block.subLabel.Text = g and ("%s  |  %.1f%% Chance"):format(g.rarity, g.chance) or "—"
+		block.prosLabel.Text = g and ("✓ " .. (g.pros or "")) or ""; block.prosLabel.TextColor3 = C.green
+		block.consLabel.Text = g and ("✗ " .. (g.cons or "")) or ""; block.consLabel.TextColor3 = C.hp
 	elseif attrName == "physique" then
 		local v = player:GetAttribute("Physique") :: string?
 		local p = v and ProvidenceData.GetPhysique(v)
@@ -880,7 +1063,7 @@ local function updateAttrBlock(attrName: string)
 		local d = v and ProvidenceData.GetDaoData(v)
 		block.nameLabel.Text = (v or "—") .. " Dao"; block.nameLabel.TextColor3 = d and Color3.fromHex(d.color) or C.t1
 		block.subLabel.Text = d and d.desc or "—"
-		block.prosLabel.Text = "☯️ Erleichtert das Erlernen dieses Daos"; block.prosLabel.TextColor3 = C.cyan
+		block.prosLabel.Text = "☯️ Eases learning this Dao"; block.prosLabel.TextColor3 = C.cyan
 		block.consLabel.Text = ""
 	end
 end
@@ -893,8 +1076,60 @@ end
 
 local confirmRemote = Net.Event("ConfirmProvidence")
 confirmBtn.MouseButton1Click:Connect(function() confirmRemote:FireServer() end)
+-- Rarity rank for celebration intensity.
+local RARITY_RANK = {
+	Common=1, Uncommon=2, Rare=3, Epic=4, Legendary=5, Mythic=6, Divine=7, Immortal=8, Chaos=8,
+}
+local function bestRollRank(): number
+	local rank = 0
+	local apt = player:GetAttribute("Aptitude")
+	local g = apt and AptitudeData.GetByName(apt)
+	if g then rank = math.max(rank, RARITY_RANK[g.rarity] or 0) end
+	local conn = player:GetAttribute("Connate")
+	if conn then rank = math.max(rank, RARITY_RANK[conn] or 0) end
+	local phys = player:GetAttribute("Physique")
+	local p = phys and ProvidenceData.GetPhysique(phys)
+	if p and p.chance <= 9 then rank = math.max(rank, 5) end  -- rare physiques
+	return rank
+end
+
+-- Golden burst + glow over the providence menu for a great roll.
+local function celebrateRoll(rank: number)
+	local glow = Instance.new("ImageLabel")
+	glow.BackgroundTransparency = 1
+	glow.Image = "rbxassetid://5028857084"  -- soft radial gradient
+	glow.ImageColor3 = rank >= 7 and Color3.fromHex("67E8F9") or (rank >= 6 and Color3.fromHex("F87171") or C.gold)
+	glow.ImageTransparency = 0.1
+	glow.Size = UDim2.fromScale(0.1, 0.1)
+	glow.Position = UDim2.fromScale(0.5, 0.5)
+	glow.AnchorPoint = Vector2.new(0.5, 0.5)
+	glow.ZIndex = 30
+	glow.Parent = menuRoot
+	TweenService:Create(glow, TweenInfo.new(0.9, Enum.EasingStyle.Quad),
+		{ Size = UDim2.fromScale(1.4, 1.4), ImageTransparency = 1 }):Play()
+	game:GetService("Debris"):AddItem(glow, 1.0)
+
+	-- Rising sparkle text
+	local tier = rank >= 7 and "✨ HEAVEN-DEFYING ROLL! ✨"
+		or rank >= 6 and "🌟 LEGENDARY ROLL!"
+		or "✨ Great roll!"
+	local lbl = mkLabel(menuRoot, tier, UDim2.new(1,0,0,40), UDim2.fromScale(0,0.42),
+		glow.ImageColor3, 26, Enum.Font.GothamBlack, Enum.TextXAlignment.Center)
+	lbl.ZIndex = 31; lbl.TextStrokeTransparency = 0.3
+	TweenService:Create(lbl, TweenInfo.new(1.2, Enum.EasingStyle.Quad),
+		{ Position = UDim2.fromScale(0,0.34), TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+	game:GetService("Debris"):AddItem(lbl, 1.3)
+end
+
 rerollAttrRemote.OnClientEvent:Connect(function(success: boolean, msg: string)
-	if success then showToast("🎲 Neu gewürfelt!", "gold") else showToast("❌ " .. tostring(msg), "warn") end
+	if success then
+		showToast("🎲 Rerolled!", "gold")
+		task.wait(0.05)
+		local rank = bestRollRank()
+		if rank >= 4 then celebrateRoll(rank) end  -- Epic or better
+	else
+		showToast("❌ " .. tostring(msg), "warn")
+	end
 end)
 
 -- ════════════════════════════════════════════════════════════
@@ -903,7 +1138,7 @@ end)
 function closeAllOverlays()
 	mainMenuLayer.Visible = false; inventoryLayer.Visible = false
 	shopLayer.Visible = false;     questLayer.Visible = false
-	sectLayer.Visible = false
+	sectLayer.Visible = false;     worldLayer.Visible = false
 end
 
 mainMenuBtn.MouseButton1Click:Connect(function() closeAllOverlays(); mainMenuLayer.Visible = true end)
@@ -912,8 +1147,12 @@ closeMainMenu.MouseButton1Click:Connect(function() mainMenuLayer.Visible = false
 invBtn.MouseButton1Click:Connect(function() closeAllOverlays(); inventoryLayer.Visible = true end)
 closeInv.MouseButton1Click:Connect(function() inventoryLayer.Visible = false end)
 
-shopBtn.MouseButton1Click:Connect(function() closeAllOverlays(); shopLayer.Visible = true end)
+shopBtn.MouseButton1Click:Connect(function() closeAllOverlays(); rebuildShop(); shopLayer.Visible = true end)
 closeShop.MouseButton1Click:Connect(function() shopLayer.Visible = false end)
+-- Refresh the catalogue whenever the realm changes (new stock unlocks).
+player:GetAttributeChangedSignal("Realm"):Connect(function()
+	if shopLayer.Visible then rebuildShop() end
+end)
 
 questBtn.MouseButton1Click:Connect(function()
 	closeAllOverlays()
@@ -929,6 +1168,13 @@ sectBtn.MouseButton1Click:Connect(function()
 end)
 closeSect.MouseButton1Click:Connect(function() sectLayer.Visible = false end)
 
+worldBtn.MouseButton1Click:Connect(function()
+	closeAllOverlays()
+	worldLayer.Visible = true
+	rebuildWorlds()
+end)
+closeWorld.MouseButton1Click:Connect(function() worldLayer.Visible = false end)
+
 mmButtons[1].MouseButton1Click:Connect(function()
 	mainMenuLayer.Visible = false
 	showToast("☯️ " ..
@@ -937,10 +1183,10 @@ mmButtons[1].MouseButton1Click:Connect(function()
 		(player:GetAttribute("Connate")  or "?") .. " · " ..
 		(player:GetAttribute("DaoAffinity") or "?"), "gold")
 end)
-mmButtons[2].MouseButton1Click:Connect(function() mainMenuLayer.Visible = false; shopLayer.Visible = true end)
+mmButtons[2].MouseButton1Click:Connect(function() mainMenuLayer.Visible = false; rebuildShop(); shopLayer.Visible = true end)
 mmButtons[3].MouseButton1Click:Connect(function() mainMenuLayer.Visible = false; questLayer.Visible = true; rebuildQuests() end)
 mmButtons[4].MouseButton1Click:Connect(function()
-	showToast("Nutze das Roblox-Menü (Esc → Disconnect) zum Verlassen.", "info")
+	showToast("Use the Roblox menu (Esc → Leave) to exit.", "info")
 	mainMenuLayer.Visible = false
 end)
 
@@ -953,7 +1199,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	local key = input.KeyCode
 	if key == Enum.KeyCode.Escape then
-		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible or sectLayer.Visible then
+		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible or sectLayer.Visible or worldLayer.Visible then
 			closeAllOverlays()
 		elseif seclPopup.Visible then
 			seclPopup.Visible = false

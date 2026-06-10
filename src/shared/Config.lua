@@ -31,7 +31,7 @@ Config.SECLUSION_CANCEL_FACTOR    = 0.70
 -- ── Providence / Rerolls ───────────────────────────────────
 -- Jedes der 4 Attribute hat eigene kostenlose Rerolls im Startmenü.
 -- Nach Bestätigung sind KEINE weiteren freien Rerolls möglich (nur Robux).
-Config.FREE_REROLLS_PER_ATTR = 2
+Config.FREE_REROLLS_PER_ATTR = 5
 
 -- ── Combat ─────────────────────────────────────────────────
 Config.NPC_RESPAWN_TIME    = 6

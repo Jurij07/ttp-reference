@@ -93,24 +93,46 @@ function NPCService.SpawnNPC(realmId: number, data: any, position: Vector3)
 	root.CFrame = CFrame.new(position)
 	root.Parent = model
 
-	-- Sichtbarer Körper.
-	local body = Instance.new("Part")
-	body.Name = "Body"
-	body.Size = Vector3.new(2, 2, 2) * bodyScale
-	body.Anchored = true; body.CanCollide = false
-	body.Material = Enum.Material.Neon
-	body.Color = mutated and MUT_COLOR or (data.boss and Color3.fromHex("F5C542") or realmColor)
-	body.CFrame = CFrame.new(position)
-	body.Parent = model
-	local mesh = Instance.new("SpecialMesh"); mesh.MeshType = Enum.MeshType.Sphere; mesh.Parent = body
+	-- ── Blocky creature body (instead of a plain sphere) ───────
+	local creatureColor = mutated and MUT_COLOR or (data.boss and Color3.fromHex("F5C542") or realmColor)
+	local s = bodyScale
+	local mat = data.boss and Enum.Material.Neon or Enum.Material.SmoothPlastic
 
-	-- Kopf (Adornee).
-	local head = Instance.new("Part")
-	head.Name = "Head"
-	head.Size = Vector3.new(1, 1, 1)
-	head.Transparency = 1; head.Anchored = true; head.CanCollide = false
-	head.CFrame = CFrame.new(position + Vector3.new(0, 1.5 * bodyScale, 0))
-	head.Parent = model
+	local function piece(name: string, size: Vector3, offset: Vector3, color: Color3, material: Enum.Material): Part
+		local p = Instance.new("Part")
+		p.Name = name; p.Size = size * s
+		p.Anchored = true; p.CanCollide = false; p.Material = material
+		p.Color = color
+		p.CFrame = CFrame.new(position + offset * s)
+		p.Parent = model
+		local c = Instance.new("SpecialMesh"); c.MeshType = Enum.MeshType.Brick; c.Parent = p
+		return p
+	end
+
+	-- Torso (the main clickable body)
+	local body = piece("Body", Vector3.new(2.2, 1.8, 3.0), Vector3.new(0, 0.6, 0), creatureColor, mat)
+	-- Four stubby legs
+	local legY = -0.5
+	piece("LegFL", Vector3.new(0.6, 1.0, 0.6), Vector3.new( 0.7, legY,  1.0), creatureColor, mat)
+	piece("LegFR", Vector3.new(0.6, 1.0, 0.6), Vector3.new(-0.7, legY,  1.0), creatureColor, mat)
+	piece("LegBL", Vector3.new(0.6, 1.0, 0.6), Vector3.new( 0.7, legY, -1.0), creatureColor, mat)
+	piece("LegBR", Vector3.new(0.6, 1.0, 0.6), Vector3.new(-0.7, legY, -1.0), creatureColor, mat)
+	-- Tail
+	piece("Tail", Vector3.new(0.5, 0.5, 1.2), Vector3.new(0, 0.8, -2.0), creatureColor, mat)
+	-- Snout / muzzle
+	piece("Snout", Vector3.new(0.9, 0.7, 0.7), Vector3.new(0, 1.4, 2.3), creatureColor, mat)
+
+	-- Head block (face) — also the billboard adornee
+	local head = piece("Head", Vector3.new(1.6, 1.5, 1.4), Vector3.new(0, 1.7, 1.6), creatureColor, mat)
+	-- Eyes
+	local eyeColor = Color3.fromRGB(15, 15, 25)
+	local eL = piece("EyeL", Vector3.new(0.32, 0.32, 0.2), Vector3.new( 0.45, 2.0, 2.35), eyeColor, Enum.Material.Neon)
+	local eR = piece("EyeR", Vector3.new(0.32, 0.32, 0.2), Vector3.new(-0.45, 2.0, 2.35), eyeColor, Enum.Material.Neon)
+	local mL = eL:FindFirstChildOfClass("SpecialMesh"); if mL then mL.MeshType = Enum.MeshType.Sphere end
+	local mR = eR:FindFirstChildOfClass("SpecialMesh"); if mR then mR.MeshType = Enum.MeshType.Sphere end
+	-- Ears
+	piece("EarL", Vector3.new(0.4, 0.6, 0.2), Vector3.new( 0.55, 2.6, 1.5), creatureColor, mat)
+	piece("EarR", Vector3.new(0.4, 0.6, 0.2), Vector3.new(-0.55, 2.6, 1.5), creatureColor, mat)
 
 	local hum = Instance.new("Humanoid")
 	hum.MaxHealth = hp; hum.Health = hp
@@ -153,7 +175,11 @@ function NPCService.SpawnNPC(realmId: number, data: any, position: Vector3)
 
 	-- Tod → Respawn.
 	hum.Died:Once(function()
-		body.Transparency = 0.75
+		for _, p in ipairs(model:GetDescendants()) do
+			if p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" then
+				p.Transparency = 0.75
+			end
+		end
 		click.MaxActivationDistance = 0
 		task.delay(Config.NPC_RESPAWN_TIME, function()
 			if model.Parent then model:Destroy() end

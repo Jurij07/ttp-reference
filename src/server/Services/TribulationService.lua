@@ -57,7 +57,7 @@ function TribulationService.Begin(player: Player, fromRealm: number)
 	player:SetAttribute("TribulationWaves", trib.waves)
 
 	Net.Event("TribulationStarted"):FireClient(player, trib.name, trib.waves)
-	notifyEvent:FireClient(player, ("⚡ %s! Überlebe %d Wellen!"):format(trib.name, trib.waves), "warn")
+	notifyEvent:FireClient(player, ("⚡ %s! Survive %d waves!"):format(trib.name, trib.waves), "warn")
 
 	local resist = breakthroughResist(profile)
 	local fraction = TribulationData.DamageFraction(trib, profile.karma or 0) * (1 - resist)
@@ -81,7 +81,7 @@ function TribulationService.Begin(player: Player, fromRealm: number)
 				player:SetAttribute("HP", math.max(1, math.floor(maxHP * 0.15)))
 				player:SetAttribute("InTribulation", false)
 				Net.Event("TribulationEnded"):FireClient(player, false)
-				notifyEvent:FireClient(player, "💀 Tribulation gescheitert! Heile dich und versuche es erneut.", "warn")
+				notifyEvent:FireClient(player, "💀 Tribulation failed! Heal up and try again.", "warn")
 				return
 			end
 			player:SetAttribute("HP", hp)
@@ -99,7 +99,7 @@ function TribulationService.Begin(player: Player, fromRealm: number)
 		CultivationService.AddStones(player, trib.rewardStones)
 		CultivationService.AddEXP(player, trib.rewardExp, true)
 		notifyEvent:FireClient(player,
-			("✨ %s überstanden! +%d EXP, +%d 💰"):format(trib.name, trib.rewardExp, trib.rewardStones), "gold")
+			("✨ Survived %s! +%d EXP, +%d 💰"):format(trib.name, trib.rewardExp, trib.rewardStones), "gold")
 	end)
 end
 

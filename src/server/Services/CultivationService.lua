@@ -63,7 +63,7 @@ local function checkPhysiqueEvolution(player: Player, profile: any): boolean
 		profile.physiqueStage = evo.stage
 		profile.bonusLifespan = (profile.bonusLifespan or 0) + evo.bonusLifespan
 		notifyEvent:FireClient(player,
-			("💪 Physique-Evolution! Stufe %d: %s"):format(evo.stage, evo.label), "gold")
+			("💪 Physique Evolution! Stage %d: %s"):format(evo.stage, evo.label), "gold")
 		return true
 	end
 	return false
@@ -77,10 +77,24 @@ function CultivationService.RecomputeStats(player: Player)
 	local baseHP, baseDmg, baseDef = CultivationData.GetCombatStats(profile.realm, profile.stage)
 	local m = ProvidenceService.GetMultipliers(player)
 
-	player:SetAttribute("MaxHP",   math.floor(baseHP  * m.hp))
-	player:SetAttribute("HP",      math.floor(baseHP  * m.hp))
-	player:SetAttribute("ATK",     math.floor(baseDmg * m.dmg))
-	player:SetAttribute("Defense", math.floor(baseDef * m.def))
+	-- Ausrüstungs-Boni einrechnen
+	local EquipmentService = require(script.Parent.EquipmentService)
+	local eq = EquipmentService.GetBonuses(player)
+
+	local newMaxHP = math.floor(baseHP * m.hp * eq.hp)
+	local oldMaxHP = (player:GetAttribute("MaxHP") or 0) :: number
+	local oldHP    = (player:GetAttribute("HP") or 0) :: number
+	player:SetAttribute("MaxHP", newMaxHP)
+	if oldMaxHP <= 0 or profile.fullHealOnRecompute then
+		-- Erst-Setup oder Realm-Aufstieg: voll heilen
+		player:SetAttribute("HP", newMaxHP)
+		profile.fullHealOnRecompute = false
+	else
+		-- Sonst aktuelle HP beibehalten (kein Gratis-Heal durch Umrüsten)
+		player:SetAttribute("HP", math.clamp(oldHP, 1, newMaxHP))
+	end
+	player:SetAttribute("ATK",     math.floor(baseDmg * m.dmg * eq.dmg))
+	player:SetAttribute("Defense", math.floor(baseDef * m.def * eq.def))
 
 	local baseLife = CultivationData.GetLifespan(profile.realm)
 	local infinite = baseLife == math.huge
@@ -96,7 +110,7 @@ function CultivationService.BeginGameplay(player: Player)
 	player:SetAttribute("InMenu", false)
 	updateMovement(player)
 	local realm = player:GetAttribute("RealmName") or "Qi Refinement"
-	notifyEvent:FireClient(player, ("☯️ Dein Weg beginnt — %s, Alter 18."):format(realm), "gold")
+	notifyEvent:FireClient(player, ("☯️ Your path begins — %s, age 18."):format(realm), "gold")
 	-- refresh quests on gameplay start
 	local QuestService = require(script.Parent.QuestService)
 	QuestService.Refresh(player)
@@ -142,8 +156,9 @@ function CultivationService.DoRealmUp(player: Player)
 	profile.realm += 1
 	profile.stage = 1
 	local realm = CultivationData.GetRealm(profile.realm)
-	notifyEvent:FireClient(player, ("⚡ DURCHBRUCH! %s erreicht!"):format(realm and realm.name or "?"), "gold")
+	notifyEvent:FireClient(player, ("⚡ BREAKTHROUGH! Reached %s!"):format(realm and realm.name or "?"), "gold")
 	checkPhysiqueEvolution(player, profile)
+	profile.fullHealOnRecompute = true
 	CultivationService.RecomputeStats(player)
 	local QuestService = require(script.Parent.QuestService)
 	QuestService.Refresh(player)
@@ -208,8 +223,9 @@ function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: bo
 			profile.realm += 1
 			profile.stage = 1
 			local realm = CultivationData.GetRealm(profile.realm)
-			notifyEvent:FireClient(player, ("⚡ DURCHBRUCH! %s erreicht!"):format(realm and realm.name or "?"), "gold")
+			notifyEvent:FireClient(player, ("⚡ BREAKTHROUGH! Reached %s!"):format(realm and realm.name or "?"), "gold")
 			checkPhysiqueEvolution(player, profile)
+			profile.fullHealOnRecompute = true
 			CultivationService.RecomputeStats(player)
 			local QuestService = require(script.Parent.QuestService)
 			QuestService.Refresh(player)
@@ -261,7 +277,8 @@ function CultivationService.Start()
 				if profile.age >= maxLife then
 					profile.age = Config.STARTING_AGE
 					profile.exp = 0
-					notifyEvent:FireClient(player, "☠️ Lebensspanne erschöpft — neues Leben beginnt (Alter 18).", "warn")
+					notifyEvent:FireClient(player, "☠️ Lifespan exhausted — a new life begins (age 18).", "warn")
+					profile.fullHealOnRecompute = true
 					CultivationService.RecomputeStats(player)
 				end
 			end

@@ -771,6 +771,8 @@ end
 -- ════════════════════════════════════════════════════════════
 -- ── Generic system overlays (companions, formations, titles, …)
 -- ════════════════════════════════════════════════════════════
+-- RB: dispatch table so do..end-scoped rebuild functions are accessible globally
+local RB: { [string]: (() -> ()) } = {}
 local function mkSystemCard(layer: Frame, title: string): (Frame, ScrollingFrame, TextLabel)
 	local card = mkPanel("Card",UDim2.new(0,600,0,520),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), layer)
 	mkLabel(card,title,UDim2.new(1,-200,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
@@ -782,11 +784,12 @@ local function mkSystemCard(layer: Frame, title: string): (Frame, ScrollingFrame
 end
 
 -- ── Companions ──────────────────────────────────────────────
+do
 local _, compList, compInfo = mkSystemCard(companionLayer, "🐾  SPIRIT COMPANIONS")
 local compState = { owned = {}, active = nil }
 local buyCompanion = Net.Event("BuyCompanion")
 local setCompanion = Net.Event("SetCompanion")
-local function rebuildCompanions()
+function RB.companions()
 	for _, c in ipairs(compList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
 	local stones = player:GetAttribute("SpiritStones") or 0
 	compInfo.Text = "💰 " .. fmt(stones)
@@ -814,15 +817,17 @@ local function rebuildCompanions()
 end
 Net.Event("CompanionSync").OnClientEvent:Connect(function(data: any)
 	compState.owned = data.owned or {}; compState.active = data.active
-	if companionLayer.Visible then rebuildCompanions() end
+	if companionLayer.Visible then RB.companions() end
 end)
+end -- companions
 
 -- ── Formations ──────────────────────────────────────────────
+do
 local _, formList, formInfo = mkSystemCard(formationLayer, "⭕  FORMATIONS")
 local formState = { owned = {}, active = nil }
 local buyFormation = Net.Event("BuyFormation")
 local setFormation = Net.Event("SetFormation")
-local function rebuildFormations()
+function RB.formations()
 	for _, c in ipairs(formList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
 	formInfo.Text = "💰 " .. fmt(player:GetAttribute("SpiritStones") or 0)
 	local realm = player:GetAttribute("Realm") or 1
@@ -850,14 +855,16 @@ local function rebuildFormations()
 end
 Net.Event("FormationSync").OnClientEvent:Connect(function(data: any)
 	formState.owned = data.owned or {}; formState.active = data.active
-	if formationLayer.Visible then rebuildFormations() end
+	if formationLayer.Visible then RB.formations() end
 end)
+end -- formations
 
 -- ── Titles ──────────────────────────────────────────────────
+do
 local _, titleList, titleInfo = mkSystemCard(titleLayer, "🏆  TITLES")
 local titleState = { unlocked = {}, active = nil }
 local setTitle = Net.Event("SetTitle")
-local function rebuildTitles()
+function RB.titles()
 	for _, c in ipairs(titleList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
 	local n = 0; for _ in pairs(titleState.unlocked) do n += 1 end
 	titleInfo.Text = ("%d / %d unlocked"):format(n, #TitleData.TITLES)
@@ -882,15 +889,17 @@ local function rebuildTitles()
 end
 Net.Event("TitleSync").OnClientEvent:Connect(function(data: any)
 	titleState.unlocked = data.unlocked or {}; titleState.active = data.active
-	if titleLayer.Visible then rebuildTitles() end
+	if titleLayer.Visible then RB.titles() end
 end)
+end -- titles
 
 -- ── Dungeons ────────────────────────────────────────────────
+do
 local _, dungList, dungInfo = mkSystemCard(dungeonLayer, "🗺️  DUNGEONS")
 local dungState = { active = nil, cooldowns = {} }
 local enterDungeon = Net.Event("EnterDungeon")
 local exitDungeon  = Net.Event("ExitDungeon")
-local function rebuildDungeons()
+function RB.dungeons()
 	for _, c in ipairs(dungList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
 	local realm = player:GetAttribute("Realm") or 1
 	dungInfo.Text = dungState.active and ("In: " .. (dungState.active.id or "")) or "Not in a dungeon"
@@ -918,13 +927,16 @@ local function rebuildDungeons()
 end
 Net.Event("DungeonSync").OnClientEvent:Connect(function(data: any)
 	dungState.active = data.active; dungState.cooldowns = data.cooldowns or {}
-	if dungeonLayer.Visible then rebuildDungeons() end
+	if dungeonLayer.Visible then RB.dungeons() end
 end)
+end -- dungeons
 
 -- ── Leaderboard ─────────────────────────────────────────────
+do
 local _, leaderList, _ = mkSystemCard(leaderLayer, "👑  LEADERBOARD")
 local CAT_LABELS = { realm="⚡ Realm", exp="✨ Total EXP", kills="⚔️ Kills", pvp="🥊 PvP Wins", stones="💰 Stones", age="⏳ Oldest" }
-local function rebuildLeaderboard(board: any)
+function RB.leaderboard(board: any?)
+	local board = board or _G.__ttpBoard
 	for _, c in ipairs(leaderList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
 	local order = 0
 	for _, cat in ipairs({"realm","exp","kills","pvp","stones","age"}) do
@@ -945,15 +957,17 @@ local function rebuildLeaderboard(board: any)
 	end
 end
 Net.Event("LeaderboardSync").OnClientEvent:Connect(function(board: any)
-	if leaderLayer.Visible then rebuildLeaderboard(board) end
 	_G.__ttpBoard = board
+	if leaderLayer.Visible then RB.leaderboard() end
 end)
+end -- leaderboard
 
 -- ── Book of Fate (event log) ────────────────────────────────
+do
 local _, bookList, bookInfo = mkSystemCard(bookLayer, "📖  BOOK OF FORTUNE & MISFORTUNE")
 bookInfo.Text = "Karma-driven fate"
 local fateLog: { any } = {}
-local function rebuildBook()
+function RB.book()
 	for _, c in ipairs(bookList:GetChildren()) do if c:IsA("Frame") then c:Destroy() end end
 	if #fateLog == 0 then
 		local e = Instance.new("TextLabel"); e.Size = UDim2.new(1,0,0,40); e.BackgroundTransparency=1
@@ -973,10 +987,12 @@ end
 Net.Event("FateEvent").OnClientEvent:Connect(function(icon, name, kind, desc)
 	table.insert(fateLog, 1, { icon=icon, name=name, kind=kind, desc=desc })
 	if #fateLog > 20 then table.remove(fateLog) end
-	if bookLayer.Visible then rebuildBook() end
+	if bookLayer.Visible then RB.book() end
 end)
+end -- book of fate
 
 -- ── Store (Robux) ───────────────────────────────────────────
+do
 local _, storeList, _ = mkSystemCard(storeLayer, "💎  STORE")
 local promptProduct = Net.Event("PromptProduct")
 local promptPass    = Net.Event("PromptPass")
@@ -1001,6 +1017,7 @@ do
 		end)
 	end
 end
+end -- store
 
 -- ════════════════════════════════════════════════════════════
 -- ── Heaven Tribulation overlay
@@ -1508,16 +1525,13 @@ end)
 hubButtons.shop.MouseButton1Click:Connect(function() openOnly(shopLayer, rebuildShop) end)
 hubButtons.quests.MouseButton1Click:Connect(function() openOnly(questLayer, rebuildQuests) end)
 hubButtons.sects.MouseButton1Click:Connect(function() openOnly(sectLayer, rebuildSects) end)
-hubButtons.companions.MouseButton1Click:Connect(function() openOnly(companionLayer, rebuildCompanions) end)
-hubButtons.formations.MouseButton1Click:Connect(function() openOnly(formationLayer, rebuildFormations) end)
-hubButtons.titles.MouseButton1Click:Connect(function() openOnly(titleLayer, rebuildTitles) end)
-hubButtons.dungeons.MouseButton1Click:Connect(function() openOnly(dungeonLayer, rebuildDungeons) end)
+hubButtons.companions.MouseButton1Click:Connect(function() openOnly(companionLayer, RB.companions) end)
+hubButtons.formations.MouseButton1Click:Connect(function() openOnly(formationLayer, RB.formations) end)
+hubButtons.titles.MouseButton1Click:Connect(function() openOnly(titleLayer, RB.titles) end)
+hubButtons.dungeons.MouseButton1Click:Connect(function() openOnly(dungeonLayer, RB.dungeons) end)
 hubButtons.world.MouseButton1Click:Connect(function() openOnly(worldLayer, rebuildWorlds) end)
-hubButtons.leaderboard.MouseButton1Click:Connect(function()
-	openOnly(leaderLayer)
-	rebuildLeaderboard(_G.__ttpBoard)
-end)
-hubButtons.book.MouseButton1Click:Connect(function() openOnly(bookLayer, rebuildBook) end)
+hubButtons.leaderboard.MouseButton1Click:Connect(function() openOnly(leaderLayer, RB.leaderboard) end)
+hubButtons.book.MouseButton1Click:Connect(function() openOnly(bookLayer, RB.book) end)
 hubButtons.store.MouseButton1Click:Connect(function() openOnly(storeLayer) end)
 hubButtons.pvp.MouseButton1Click:Connect(function() Net.Event("TogglePvP"):FireServer() end)
 hubButtons.leave.MouseButton1Click:Connect(function()
@@ -1530,8 +1544,8 @@ bindAttr("PvPEnabled", function(v)
 end)
 -- Live-refresh open system overlays when stones change (affordability).
 player:GetAttributeChangedSignal("SpiritStones"):Connect(function()
-	if companionLayer.Visible then rebuildCompanions() end
-	if formationLayer.Visible then rebuildFormations() end
+	if companionLayer.Visible then RB.companions() end
+	if formationLayer.Visible then RB.formations() end
 end)
 
 -- ════════════════════════════════════════════════════════════

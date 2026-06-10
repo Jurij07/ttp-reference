@@ -70,4 +70,40 @@ function WorldData.TeleportPosition(realmId: number): Vector3
 	return center + Vector3.new(0, WorldData.ZONE_HEIGHT + 3, 0)
 end
 
+-- ════════════════════════════════════════════════════════════
+-- Stacked-world layout (4 worlds on the Y axis). TerrainGenerator,
+-- WorldTransitionService and the client all read these so portals,
+-- spawns and effects line up.
+-- ════════════════════════════════════════════════════════════
+WorldData.WORLD_Y = { [1] = 0, [2] = 1800, [3] = 3600, [4] = 5400 }
+
+-- Minimum realm to belong to / enter each world.
+--   World 2 (Immortal Sky) unlocks at the Mahayana (R9) breakthrough.
+--   World 3 (Sage Heaven) at R16.   World 4 (Primal Chaos) at R23.
+WorldData.WORLD_MIN_REALM = { [1] = 1, [2] = 9, [3] = 16, [4] = 23 }
+
+WorldData.WORLD_NAME = {
+	[1] = "Mortal Earth",
+	[2] = "Immortal Sky",
+	[3] = "Sage Heaven",
+	[4] = "Primal Chaos",
+}
+
+-- Arrival pad position for each world (where a portal drops you).
+WorldData.WORLD_ARRIVAL = {
+	[1] = Vector3.new(0, 6, 0),
+	[2] = Vector3.new(0, 1806, 0),
+	[3] = Vector3.new(-200, 3609, 0),
+	[4] = Vector3.new(0, 5412, 0),
+}
+
+-- Which world a given realm belongs to (1-4). R9 still lives on Mortal
+-- Earth; R10 and above belong to the Immortal Sky.
+function WorldData.GetWorldForRealm(realm: number): number
+	if realm >= WorldData.WORLD_MIN_REALM[4] then return 4
+	elseif realm >= WorldData.WORLD_MIN_REALM[3] then return 3
+	elseif realm >= 10 then return 2
+	else return 1 end
+end
+
 return WorldData

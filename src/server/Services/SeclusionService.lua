@@ -41,7 +41,7 @@ local function grantRewards(player: Player, yearsEffective: number, yearsAged: n
 	if profile.age >= maxLife then
 		profile.age = Config.STARTING_AGE
 		profile.exp = 0
-		notifyEvent:FireClient(player, "☠️ Lebensspanne in Klausur erschöpft — neues Leben (Alter 18).", "warn")
+		notifyEvent:FireClient(player, "☠️ Lifespan exhausted during seclusion — a new life begins (age 18).", "warn")
 		CultivationService.RecomputeStats(player)
 	end
 
@@ -58,7 +58,7 @@ local function finishSeclusion(player: Player, years: number)
 	Net.Event("SeclusionFinished"):FireClient(player, expGained or 0, stonesGained or 0, years, false)
 	notifyEvent:FireClient(
 		player,
-		("☯️ Klausur abgeschlossen! +%d Jahre, +EXP, +%d Stones."):format(years, stonesGained or 0),
+		("☯️ Seclusion complete! +%d years, +EXP, +%d Stones."):format(years, stonesGained or 0),
 		"gold"
 	)
 	-- Quest-Meldung: Klausur abgeschlossen
@@ -85,7 +85,7 @@ function SeclusionService.StartSeclusion(player: Player, years: number)
 
 	-- Dem Client Dauer mitteilen (für Countdown)
 	Net.Event("SeclusionStarted"):FireClient(player, duration, years)
-	notifyEvent:FireClient(player, ("🧘 Klausur begonnen: %d Jahre — %d Minuten Echtzeit."):format(years, math.ceil(duration / 60)), "info")
+	notifyEvent:FireClient(player, ("🧘 Seclusion begun: %d years — %d real minutes."):format(years, math.ceil(duration / 60)), "info")
 
 	local thread = task.delay(duration, function()
 		if player.Parent then
@@ -117,7 +117,7 @@ function SeclusionService.CancelSeclusion(player: Player)
 	Net.Event("SeclusionFinished"):FireClient(player, expGained or 0, stonesGained or 0, math.floor(yearsAged), true)
 	notifyEvent:FireClient(
 		player,
-		("⚠️ Klausur abgebrochen! Nur %.1f Jahre kultiviert (+30%% Abzug)."):format(yearsAged),
+		("⚠️ Seclusion canceled! Only %.1f years cultivated (−30%% penalty)."):format(yearsAged),
 		"warn"
 	)
 end

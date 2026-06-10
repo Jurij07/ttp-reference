@@ -29,7 +29,7 @@ export type Sect = {
 SectData.SECTS = {
 	{
 		id="six_paths", name="Six Paths Hidden Sect", icon="☯️", reqRealm=3, maxLevel=10,
-		desc="Han Jues legendäre Sekte. Buffs für alle Cultivation-Aspekte.",
+		desc="Han Jue's legendary sect. Buffs for every cultivation aspect.",
 		milestones = {
 			{ level=1,  name="Dao Foundation",       expMult=1.10, dmgMult=1.00, defMult=1.00, hpMult=1.00, breakthroughBonus=0.00 },
 			{ level=3,  name="Six Paths Insight",     expMult=1.25, dmgMult=1.10, defMult=1.00, hpMult=1.00, breakthroughBonus=0.00 },
@@ -40,7 +40,7 @@ SectData.SECTS = {
 	},
 	{
 		id="calamity_star", name="Calamity Star Sect", icon="💫", reqRealm=2, maxLevel=10,
-		desc="Damage-fokussierte Sekte. Macht dich zum stärksten Angreifer.",
+		desc="Damage-focused sect. Makes you the strongest attacker.",
 		milestones = {
 			{ level=1,  name="Calamity Brand",     expMult=1.00, dmgMult=1.15, defMult=1.00, hpMult=1.00, breakthroughBonus=0.00 },
 			{ level=3,  name="Star Curse",         expMult=1.00, dmgMult=1.25, defMult=1.00, hpMult=1.00, breakthroughBonus=0.00 },
@@ -51,7 +51,7 @@ SectData.SECTS = {
 	},
 	{
 		id="water_spirit", name="Water Spirit Sect", icon="💧", reqRealm=2, maxLevel=10,
-		desc="Tank & Healing Sekte. Überlebt alles.",
+		desc="Tank & healing sect. Survives anything.",
 		milestones = {
 			{ level=1,  name="Water Blessing",   expMult=1.00, dmgMult=1.00, defMult=1.00, hpMult=1.10, breakthroughBonus=0.00 },
 			{ level=3,  name="Spirit Flow",      expMult=1.00, dmgMult=1.00, defMult=1.00, hpMult=1.20, breakthroughBonus=0.00 },
@@ -62,7 +62,7 @@ SectData.SECTS = {
 	},
 	{
 		id="lone_star", name="Lone Star Sect", icon="⭐", reqRealm=1, maxLevel=10,
-		desc="Solo-Spieler Sekte. Maximaler EXP-Gewinn wenn alleine.",
+		desc="Solo-player sect. Maximum EXP gain when alone.",
 		milestones = {
 			{ level=1,  name="Lone Path",        expMult=1.20, dmgMult=1.00, defMult=1.00, hpMult=1.00, breakthroughBonus=0.00 },
 			{ level=3,  name="Solitary Star",    expMult=1.40, dmgMult=1.00, defMult=1.00, hpMult=1.00, breakthroughBonus=0.00 },

@@ -12,6 +12,7 @@ local Buffs = require(ReplicatedStorage:WaitForChild("Buffs"))
 
 local DataManager        = require(script.Parent.DataManager)
 local CultivationService = require(script.Parent.CultivationService)
+local StatusEffectService = require(script.Parent.StatusEffectService)
 
 local CombatService = {}
 
@@ -22,14 +23,25 @@ local lastAttack: {[number]: number} = {}
 local NPC_COUNTER_CD = 1.0
 
 local function npcCounterattack(player: Player, model: Model)
+	-- Stunned / frozen foes cannot retaliate.
+	if StatusEffectService.IsControlled(model) then return end
+
 	local now = os.clock()
 	local last = (model:GetAttribute("LastCounter") or 0) :: number
 	if now - last < NPC_COUNTER_CD then return end
 	model:SetAttribute("LastCounter", now)
 
 	local npcDmg   = (model:GetAttribute("Damage")  or 0) :: number
-	local playerDef = (player:GetAttribute("Defense") or 0) :: number
-	local applied  = math.max(npcDmg - playerDef, 1)
+	local playerDef = ((player:GetAttribute("Defense") or 0) :: number) * StatusEffectService.DefenceMult(player)
+	local applied  = math.max(npcDmg - playerDef, 1) * StatusEffectService.IncomingMult(player)
+
+	-- Venomous / fiery beasts inflict a debuff on the player.
+	local npcName = (model:GetAttribute("NPCName") or "") :: string
+	if npcName:find("Poison") or npcName:find("Venom") or npcName:find("Snake") then
+		StatusEffectService.Apply(player, "poison")
+	elseif npcName:find("Fire") or npcName:find("Flame") or npcName:find("Burn") then
+		StatusEffectService.Apply(player, "burn")
+	end
 
 	local hp = ((player:GetAttribute("HP") or 0) :: number) - applied
 	if hp <= 0 then
@@ -40,7 +52,7 @@ local function npcCounterattack(player: Player, model: Model)
 			local lost = math.floor(profile.spiritStones * 0.25)
 			profile.spiritStones -= lost
 			player:SetAttribute("SpiritStones", profile.spiritStones)
-			notifyEvent:FireClient(player, ("💀 Besiegt! %d Spirit Stones verloren."):format(lost), "warn")
+			notifyEvent:FireClient(player, ("💀 Defeated! Lost %d Spirit Stones."):format(lost), "warn")
 		end
 	else
 		player:SetAttribute("HP", hp)
@@ -75,8 +87,8 @@ function CombatService.DealDamage(player: Player, model: Model, rawDmg: number, 
 	local hum = model:FindFirstChildOfClass("Humanoid")
 	if not hum or hum.Health <= 0 then return end
 
-	local npcDef = (model:GetAttribute("Defense") or 0) :: number
-	local applied = math.max(rawDmg - npcDef, 1)
+	local npcDef = ((model:GetAttribute("Defense") or 0) :: number) * StatusEffectService.DefenceMult(model)
+	local applied = math.max(rawDmg - npcDef, 1) * StatusEffectService.IncomingMult(model)
 	hum.Health = math.max(hum.Health - applied, 0)
 	hitEvent:FireClient(player, model:GetAttribute("NPCName") or model.Name, applied)
 

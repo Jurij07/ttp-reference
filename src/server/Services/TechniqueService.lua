@@ -68,12 +68,19 @@ function TechniqueService.UseActive(player: Player)
 
 	CombatService.DealDamage(player, target, rawDmg, false)
 
-	-- Healing technique
+	-- Dao-flavoured status effect on the struck foe.
+	local StatusEffectService = require(script.Parent.StatusEffectService)
+	local dao = (player:GetAttribute("DaoAffinity") or "") :: string
+	local debuff = StatusEffectService.DaoDebuff(dao)
+	if debuff then StatusEffectService.Apply(target, debuff) end
+
+	-- Healing technique → also grants Regenerating to self.
 	if tech.healFrac then
 		local heal = rawDmg * tech.healFrac
 		local maxHP = (player:GetAttribute("MaxHP") or 1) :: number
 		local hp    = (player:GetAttribute("HP")    or 0) :: number
 		player:SetAttribute("HP", math.min(maxHP, hp + heal))
+		StatusEffectService.Apply(player, "regenerating")
 	end
 
 	Net.Event("TechniqueUsed"):FireClient(player, tech.name, tech.cooldown)

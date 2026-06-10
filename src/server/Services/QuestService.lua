@@ -51,7 +51,7 @@ function QuestService.Claim(player: Player, questIdRaw: any)
 	local q = QuestData.GetQuest(questId)
 	if not q then return end
 	if not isComplete(profile, q) then
-		notifyEvent:FireClient(player, "Quest noch nicht abgeschlossen.", "warn")
+		notifyEvent:FireClient(player, "Quest not yet complete.", "warn")
 		return
 	end
 
@@ -73,7 +73,7 @@ function QuestService.Claim(player: Player, questIdRaw: any)
 		CultivationService.AddStones(player, q.rewardStones)
 	end
 
-	notifyEvent:FireClient(player, ("📜 Quest abgeschlossen: %s"):format(q.name), "gold")
+	notifyEvent:FireClient(player, ("📜 Quest complete: %s"):format(q.name), "gold")
 	QuestService.Refresh(player)
 end
 

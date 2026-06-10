@@ -265,6 +265,36 @@ local techPanel = mkPanel("TechPanel", UDim2.new(0,380,0,34), UDim2.new(0.5,0,1,
 local techFill  = mkBar(techPanel, C.a1, UDim2.new(0,12,0,18), 8)
 local techLabel = mkLabel(techPanel,"[Q] Technique ready",UDim2.new(1,-24,0,14),UDim2.new(0,12,0,2),C.t3,10,nil,Enum.TextXAlignment.Center)
 
+-- Status-effect badge strip (above the technique bar)
+local statusStrip = Instance.new("Frame")
+statusStrip.Size = UDim2.new(0,380,0,24); statusStrip.Position = UDim2.new(0.5,0,1,-186)
+statusStrip.AnchorPoint = Vector2.new(0.5,1); statusStrip.BackgroundTransparency = 1
+statusStrip.Parent = hudRoot
+local statusLayout = Instance.new("UIListLayout")
+statusLayout.FillDirection = Enum.FillDirection.Horizontal
+statusLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+statusLayout.Padding = UDim.new(0,4); statusLayout.Parent = statusStrip
+
+local STATUS_ICON = {
+	burn="🔥", poison="🟢", freeze="❄️", stun="💫", bleed="🩸", weakened="🔻",
+	silence="🔇", regenerating="💚", empowered="💪", shielded="🛡️", haste="💨",
+	qi_surge="🌀", dao_insight="☯️", charged="⚡",
+}
+local activeBadges: { [string]: TextLabel } = {}
+local function showStatus(effectId: string, kind: string, duration: number)
+	local existing = activeBadges[effectId]
+	if existing then existing:Destroy() end
+	local badge = Instance.new("TextLabel")
+	badge.Size = UDim2.fromOffset(30,24); badge.BackgroundColor3 = kind == "BUFF" and Color3.fromHex("123022") or Color3.fromHex("301216")
+	badge.Text = STATUS_ICON[effectId] or "✦"; badge.TextSize = 14; badge.Font = Enum.Font.GothamBold
+	badge.TextColor3 = C.t1; corner(badge,5); stroke(badge, kind == "BUFF" and C.green or C.hp)
+	badge.Parent = statusStrip
+	activeBadges[effectId] = badge
+	task.delay(duration, function()
+		if activeBadges[effectId] == badge then activeBadges[effectId] = nil; badge:Destroy() end
+	end)
+end
+
 local seclPanel = mkPanel("SeclPanel", UDim2.new(0,215,0,90), UDim2.new(0,14,1,-14), Vector2.new(0,1), hudRoot)
 local seclBtn   = mkButton(seclPanel,"🧘 Enter Seclusion",UDim2.new(1,-16,0,36),UDim2.new(0,8,0,8),C.a1)
 local seclStatus = mkLabel(seclPanel,"Seclusion: Inactive",UDim2.new(1,-16,0,16),UDim2.new(0,8,0,50),C.t3,11)
@@ -1078,7 +1108,7 @@ for _, p in ipairs(ProvidenceData.PHYSIQUES) do
 	infoRow('<font color="#F87171">✗ ' .. p.cons .. '</font>', C.hp, 11)
 end
 
-infoRow("🎭  CONNATE — Seltenheit & Lebensspanne",C.gold,14,Enum.Font.GothamBold,10)
+infoRow("🎭  CONNATE — Rarity & Lifespan",C.gold,14,Enum.Font.GothamBold,10)
 for _, c in ipairs(ProvidenceData.CONNATES) do
 	local col = RARITY[c.name] or C.t1
 	infoRow(('<b>%s</b>  <font color="#5C6488">%.1f%%</font>'):format(c.name, c.chance), col, 12)
@@ -1522,6 +1552,10 @@ end)
 -- ── Network events
 -- ════════════════════════════════════════════════════════════
 Net.Event("Notify").OnClientEvent:Connect(showToast)
+
+Net.Event("StatusEffect").OnClientEvent:Connect(function(effectId: string, _name: string, kind: string, duration: number)
+	showStatus(effectId, kind, duration)
+end)
 
 Net.Event("InventorySync").OnClientEvent:Connect(function(inventory: any)
 	rebuildInventory(inventory)

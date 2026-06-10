@@ -219,13 +219,9 @@ local TitleData      = require(GameData:WaitForChild("TitleData"))
 local DungeonData    = require(GameData:WaitForChild("DungeonData"))
 
 -- Teleport target for a realm zone (matches the NPCService spawn layout).
+local WorldData = require(GameData:WaitForChild("WorldData"))
 local function realmZonePosition(realmId: number): Vector3
-	local realms = NPCData.GetImplementedRealms()
-	local rowIndex = 1
-	for i, r in ipairs(realms) do if r == realmId then rowIndex = i end end
-	local origin = Config.NPC_SPAWN_ORIGIN
-	local spread = Config.NPC_SPAWN_SPREAD
-	return origin + Vector3.new(spread * 4.5, 2, (rowIndex - 1) * spread - spread)
+	return WorldData.TeleportPosition(realmId)
 end
 
 -- Vorwärts-Deklaration (Definition weiter unten bei den Button-Bindungen).

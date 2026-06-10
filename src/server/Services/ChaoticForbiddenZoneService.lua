@@ -54,8 +54,6 @@ local function start(player: Player)
 end
 
 function ChaoticForbiddenZoneService.Start()
-	timerEvent
-
 	task.spawn(function()
 		workspace:WaitForChild("World", 30)
 		for _, gate in ipairs(CollectionService:GetTagged("ChaoticForbiddenZone")) do

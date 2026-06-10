@@ -20,6 +20,12 @@ local TribulationService = {}
 
 local notifyEvent = Net.Event("Notify")
 
+-- Server-side signal fired when a player survives a tribulation. Other services
+-- (e.g. TribulationPeakAnnouncementService) listen to this; the client-facing
+-- TribulationEnded RemoteEvent cannot be observed on the server.
+local survivedBindable = Instance.new("BindableEvent")
+TribulationService.Survived = survivedBindable.Event
+
 local WAVE_INTERVAL = 1.4  -- Sekunden zwischen Blitz-Wellen
 
 -- Gesamte Durchbruch-Resistenz aus Sekte + Physique-Evolution (max. 0.75).
@@ -96,6 +102,7 @@ function TribulationService.Begin(player: Player, fromRealm: number)
 		-- Alle Wellen überlebt → Erfolg
 		player:SetAttribute("InTribulation", false)
 		Net.Event("TribulationEnded"):FireClient(player, true)
+		survivedBindable:Fire(player, fromRealm)
 		profile.tribulationsSurvived = (profile.tribulationsSurvived or 0) + 1
 		local TitleService = require(script.Parent.TitleService)
 		TitleService.CheckUnlocks(player)

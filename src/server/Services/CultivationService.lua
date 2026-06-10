@@ -81,7 +81,10 @@ function CultivationService.RecomputeStats(player: Player)
 	local EquipmentService = require(script.Parent.EquipmentService)
 	local eq = EquipmentService.GetBonuses(player)
 
-	local newMaxHP = math.floor(baseHP * m.hp * eq.hp)
+	-- Blank Realm Insight: permanent +1% to all stats once earned.
+	local insight = player:GetAttribute("BlankRealmInsight") and 1.01 or 1.0
+
+	local newMaxHP = math.floor(baseHP * m.hp * eq.hp * insight)
 	local oldMaxHP = (player:GetAttribute("MaxHP") or 0) :: number
 	local oldHP    = (player:GetAttribute("HP") or 0) :: number
 	player:SetAttribute("MaxHP", newMaxHP)
@@ -93,8 +96,8 @@ function CultivationService.RecomputeStats(player: Player)
 		-- Sonst aktuelle HP beibehalten (kein Gratis-Heal durch Umrüsten)
 		player:SetAttribute("HP", math.clamp(oldHP, 1, newMaxHP))
 	end
-	player:SetAttribute("ATK",     math.floor(baseDmg * m.dmg * eq.dmg))
-	player:SetAttribute("Defense", math.floor(baseDef * m.def * eq.def))
+	player:SetAttribute("ATK",     math.floor(baseDmg * m.dmg * eq.dmg * insight))
+	player:SetAttribute("Defense", math.floor(baseDef * m.def * eq.def * insight))
 
 	local baseLife = CultivationData.GetLifespan(profile.realm)
 	local infinite = baseLife == math.huge
@@ -171,6 +174,19 @@ function CultivationService.DoRealmUp(player: Player)
 end
 
 -- isRaw=true skips Providence + Buff multipliers (for quest/item rewards)
+-- Multiplier from world zones / states: meditation grotto & hidden island
+-- (MeditationBonus), the personal Dao Field (2×) and the Book of Misfortune
+-- curse (0.9×). Applied to active cultivation/combat EXP only.
+function CultivationService.ZoneExpMult(player: Player): number
+	local mult = 1.0
+	local med = player:GetAttribute("MeditationBonus")
+	if typeof(med) == "number" and med > 0 then mult *= med end
+	if player:GetAttribute("InDaoField") then mult *= 2 end
+	local curse = player:GetAttribute("CursedExpMult")
+	if typeof(curse) == "number" and curse > 0 then mult *= curse end
+	return mult
+end
+
 function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: boolean?)
 	local profile = DataManager.Get(player)
 	if not profile then return end
@@ -187,7 +203,7 @@ function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: bo
 	else
 		local m = ProvidenceService.GetMultipliers(player)
 		local buffMult = Buffs.GetMult(player, "Exp")
-		gained = baseAmount * m.exp * buffMult
+		gained = baseAmount * m.exp * buffMult * CultivationService.ZoneExpMult(player)
 	end
 	profile.exp += gained
 	if gained > 0 then

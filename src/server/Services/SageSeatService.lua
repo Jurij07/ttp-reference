@@ -140,8 +140,6 @@ local function challenge(player: Player)
 end
 
 function SageSeatService.Start()
-	seatGranted; seatsSync
-
 	if Config.USE_DATASTORE then
 		local ok, result = pcall(function() return DataStoreService:GetDataStore(STORE_NAME) end)
 		if ok then store = result end

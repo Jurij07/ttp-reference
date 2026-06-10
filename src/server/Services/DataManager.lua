@@ -57,6 +57,14 @@ local function defaultProfile(): any
 		sectId         = nil,      -- beigetretene Sekte (oder nil)
 		sectLevel      = 0,        -- Sekten-Level
 		sectExp        = 0,        -- Sekten-EXP zum nächsten Level
+		-- World systems (R1–R26 world concept)
+		wallOfEternityAdded    = false,  -- already engraved on the Wall of Eternity?
+		hanJueShrineLastPrayed = 0,      -- os.time() of last shrine prayer
+		blankRealmInsight      = false,  -- permanent +1% all stats earned?
+		cursedExpMultExpiry    = 0,      -- os.time() until Book-of-Misfortune curse ends
+		bookOfMisfortuneLastUsed = 0,    -- os.time() of last curse cast
+		sageSeatNumber         = 0,      -- claimed Sage seat (0 = none)
+		worldLevel             = 1,      -- highest world reached (1-4)
 	}
 end
 

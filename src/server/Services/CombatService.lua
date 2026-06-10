@@ -71,6 +71,11 @@ local function rewardKill(player: Player, model: Model)
 	exp    = math.floor(exp * expMult)
 	stones = math.floor(stones * stoneMult)
 
+	-- Chaotic Forbidden Zone: 5× spirit stones while braving the timer.
+	if player:GetAttribute("ForbiddenZoneActive") then
+		stones *= 5
+	end
+
 	CultivationService.AddEXP(player, exp)
 	CultivationService.AddStones(player, stones)
 	CultivationService.AddKill(player)

@@ -101,6 +101,24 @@ function DaoFieldService.Start()
 	enterEvent.OnServerEvent:Connect(function(player) DaoFieldService.Enter(player) end)
 	leaveEvent.OnServerEvent:Connect(function(player) DaoFieldService.Leave(player) end)
 
+	-- Wire the in-world Dao Field portal so it works without any UI.
+	local CollectionService = game:GetService("CollectionService")
+	local touchCd: { [number]: number } = {}
+	task.spawn(function()
+		workspace:WaitForChild("World", 30)
+		for _, portal in ipairs(CollectionService:GetTagged("DaoFieldPortal")) do
+			portal.Touched:Connect(function(hit)
+				local model = hit:FindFirstAncestorOfClass("Model")
+				local player = model and Players:GetPlayerFromCharacter(model)
+				if not player then return end
+				local now = os.clock()
+				if now - (touchCd[player.UserId] or 0) < 2 then return end
+				touchCd[player.UserId] = now
+				DaoFieldService.Enter(player)
+			end)
+		end
+	end)
+
 	Players.PlayerRemoving:Connect(function(player)
 		returnPos[player.UserId] = nil
 		priorPvP[player.UserId] = nil

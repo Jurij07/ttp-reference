@@ -17,8 +17,6 @@ local serverAnnounce = Net.Event("ServerAnnounce")
 local lightning      = Net.Event("LightningEffect")
 
 function TribulationPeakAnnouncementService.Start()
-	serverAnnounce; lightning
-
 	TribulationService.Survived:Connect(function(player: Player, _realm: number)
 		local char = player.Character
 		local root = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?

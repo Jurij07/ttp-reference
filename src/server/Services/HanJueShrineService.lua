@@ -60,8 +60,6 @@ local function pray(player: Player)
 end
 
 function HanJueShrineService.Start()
-	shrineBlessing
-
 	task.spawn(function()
 		workspace:WaitForChild("World", 30)
 		for _, shrine in ipairs(CollectionService:GetTagged("Shrine")) do

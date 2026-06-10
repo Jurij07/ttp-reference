@@ -117,8 +117,6 @@ local function wireStone(stone: BasePart)
 end
 
 function SecretGrottoService.Start()
-	grottoStatus
-
 	task.spawn(function()
 		workspace:WaitForChild("World", 30)
 

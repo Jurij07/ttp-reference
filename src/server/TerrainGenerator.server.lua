@@ -1,26 +1,36 @@
 --!strict
 -- TerrainGenerator.server.lua
--- 4-layer xianxia world stacked on the Y axis:
---   World 1 "Mortal Earth"   (R1-9):  Y=0    — ring of 9 themed zones around a central hub
---   World 2 "Immortal Sky"   (R10+):  Y=1800 — floating jade archipelago
---   World 3 "Sage Heaven"    (R17+):  Y=3600 — neon energy sphere / divine halls
---   World 4 "Primal Chaos"   (R24+):  Y=5400 — basalt darkness with neon veins
--- World 1 positions match WorldData.ZoneCenter() exactly so NPCService aligns.
+-- Builds the complete Top Tier Providence world: four stacked worlds on the
+-- Y axis, faithful to the R1–R26 world concept.
+--
+--   World 1 "Mortal Earth"  (Y=0)    R1–9   — Spawn Village + 9 themed realm
+--                                              zones (5 biomes) + Netherworld
+--   World 2 "Immortal Sky"   (Y=1800) R10–16 — Jade Palace City, 33-Layer Heaven
+--   World 3 "Sage Heaven"    (Y=3600) R17–23 — Mystic Divine Palace, Chaos edge
+--   World 4 "Primal Chaos"   (Y=5400) R24–26 — Chaos Battlefield, Origin Realm
+--
+-- All World 1 zone positions come straight from WorldData.ZoneCenter() so the
+-- NPCService spawn layout and the realm teleports line up exactly.
+--
+-- This script only builds GEOMETRY. Interactive parts are given stable names
+-- and CollectionService tags; the gameplay services (WorldTransitionService,
+-- SecretGrottoService, YellowSpringService, …) find them and attach behaviour.
 
-local Workspace = workspace
-local Lighting  = game:GetService("Lighting")
+local Workspace        = workspace
+local Lighting         = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CollectionService = game:GetService("CollectionService")
 
 local WorldData       = require(ReplicatedStorage:WaitForChild("GameData"):WaitForChild("WorldData"))
 local CultivationData = require(ReplicatedStorage:WaitForChild("GameData"):WaitForChild("CultivationData"))
 
--- ── Layer Y offsets ───────────────────────────────────────────────────────────
-local Y1 =    0   -- Mortal Earth
-local Y2 = 1800   -- Immortal Sky
-local Y3 = 3600   -- Sage Heaven
-local Y4 = 5400   -- Primal Chaos
+-- ── Layer Y offsets ──────────────────────────────────────────────────────────
+local Y1 = WorldData.WORLD_Y[1]
+local Y2 = WorldData.WORLD_Y[2]
+local Y3 = WorldData.WORLD_Y[3]
+local Y4 = WorldData.WORLD_Y[4]
 
--- ── Lighting ──────────────────────────────────────────────────────────────────
+-- ── Lighting ─────────────────────────────────────────────────────────────────
 Lighting.Ambient        = Color3.fromRGB(140, 140, 165)
 Lighting.OutdoorAmbient = Color3.fromRGB(175, 175, 200)
 Lighting.Brightness     = 3
@@ -36,12 +46,12 @@ end
 local bloom = Instance.new("BloomEffect")
 bloom.Intensity = 0.6; bloom.Size = 28; bloom.Threshold = 0.90; bloom.Parent = Lighting
 
--- ── World folder ──────────────────────────────────────────────────────────────
+-- ── World folder ─────────────────────────────────────────────────────────────
 local world = Workspace:FindFirstChild("World")
 if world then world:Destroy() end
 world = Instance.new("Folder"); world.Name = "World"; world.Parent = Workspace
 
--- ── Part helpers ──────────────────────────────────────────────────────────────
+-- ── Part helpers ─────────────────────────────────────────────────────────────
 local function part(name: string, size: Vector3, pos: Vector3, color: Color3,
 		mat: Enum.Material?, parent: Instance?): Part
 	local p = Instance.new("Part")
@@ -67,365 +77,688 @@ local function ball(name: string, dia: number, pos: Vector3, color: Color3,
 	return p
 end
 
-local function billboard3d(parent: Instance, pos: Vector3, line1: string, col1: Color3,
-		line2: string, col2: Color3)
+local function billboard(parent: Instance, pos: Vector3, line1: string, col1: Color3,
+		line2: string?, col2: Color3?)
 	local anchor = Instance.new("Part"); anchor.Anchored = true; anchor.CanCollide = false
-	anchor.Transparency = 1; anchor.Size = Vector3.new(1,1,1); anchor.Position = pos
-	anchor.Parent = parent
+	anchor.Transparency = 1; anchor.Size = Vector3.new(1, 1, 1); anchor.Position = pos
+	anchor.Name = "Label"; anchor.Parent = parent
 	local bg = Instance.new("BillboardGui")
-	bg.Size = UDim2.fromOffset(360, 76); bg.StudsOffset = Vector3.new(0,0,0)
-	bg.AlwaysOnTop = false; bg.Adornee = anchor; bg.Parent = anchor
-	local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.fromScale(1,0.58)
-	lbl1.BackgroundTransparency = 1; lbl1.Text = line1; lbl1.TextColor3 = col1
-	lbl1.TextScaled = true; lbl1.Font = Enum.Font.GothamBlack
-	lbl1.TextStrokeTransparency = 0.3; lbl1.Parent = bg
-	local lbl2 = Instance.new("TextLabel"); lbl2.Size = UDim2.fromScale(1,0.42)
-	lbl2.Position = UDim2.fromScale(0,0.58); lbl2.BackgroundTransparency = 1
-	lbl2.Text = line2; lbl2.TextColor3 = col2; lbl2.TextScaled = true
-	lbl2.Font = Enum.Font.GothamMedium; lbl2.TextStrokeTransparency = 0.5; lbl2.Parent = bg
+	bg.Size = UDim2.fromOffset(360, line2 and 76 or 44); bg.AlwaysOnTop = false
+	bg.Adornee = anchor; bg.Parent = anchor
+	local l1 = Instance.new("TextLabel"); l1.BackgroundTransparency = 1
+	l1.Size = UDim2.fromScale(1, line2 and 0.58 or 1); l1.Text = line1; l1.TextColor3 = col1
+	l1.TextScaled = true; l1.Font = Enum.Font.GothamBlack; l1.TextStrokeTransparency = 0.3
+	l1.Parent = bg
+	if line2 then
+		local l2 = Instance.new("TextLabel"); l2.BackgroundTransparency = 1
+		l2.Position = UDim2.fromScale(0, 0.58); l2.Size = UDim2.fromScale(1, 0.42)
+		l2.Text = line2; l2.TextColor3 = col2 or Color3.fromRGB(230, 230, 230)
+		l2.TextScaled = true; l2.Font = Enum.Font.GothamMedium; l2.TextStrokeTransparency = 0.5
+		l2.Parent = bg
+	end
 end
 
-local function portalArch(zone: Instance, pos: Vector3, accentCol: Color3, label: string)
-	local pL = part("PortalL", Vector3.new(3,20,3), pos + Vector3.new(-7,10,0), accentCol, Enum.Material.Neon, zone)
-	local pR = part("PortalR", Vector3.new(3,20,3), pos + Vector3.new( 7,10,0), accentCol, Enum.Material.Neon, zone)
-	part("PortalTop", Vector3.new(17,3,3), pos + Vector3.new(0,21,0), accentCol, Enum.Material.Neon, zone)
-	ball("PortalGem", 5, pos + Vector3.new(0,24,0), Color3.fromRGB(255,255,255), Enum.Material.Neon, zone)
-	billboard3d(zone, pos + Vector3.new(0,30,0), label,
-		accentCol, "[ ENTER ]", Color3.fromRGB(220,220,220))
-	_ = pL; _ = pR
+local function signBoard(parent: Instance, pos: Vector3, size: Vector3, text: string,
+		col: Color3, bgCol: Color3): Part
+	local p = part("Sign", size, pos, bgCol, Enum.Material.SmoothPlastic, parent)
+	p.CanCollide = false
+	local sg = Instance.new("SurfaceGui"); sg.Face = Enum.NormalId.Front; sg.Parent = p
+	local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.fromScale(1, 1)
+	lbl.BackgroundTransparency = 1; lbl.Text = text; lbl.TextColor3 = col
+	lbl.TextScaled = true; lbl.Font = Enum.Font.GothamBlack; lbl.Parent = sg
+	return p
 end
+
+local function portalArch(parent: Instance, name: string, pos: Vector3, accent: Color3, label: string): Part
+	part("PillarL", Vector3.new(3, 20, 3), pos + Vector3.new(-7, 10, 0), accent, Enum.Material.Neon, parent)
+	part("PillarR", Vector3.new(3, 20, 3), pos + Vector3.new( 7, 10, 0), accent, Enum.Material.Neon, parent)
+	part("Lintel", Vector3.new(17, 3, 3), pos + Vector3.new(0, 21, 0), accent, Enum.Material.Neon, parent)
+	ball("Gem", 5, pos + Vector3.new(0, 24, 0), Color3.fromRGB(255, 255, 255), Enum.Material.Neon, parent)
+	local trig = part(name, Vector3.new(12, 18, 4), pos + Vector3.new(0, 9, 0), accent, Enum.Material.ForceField, parent)
+	trig.Transparency = 0.6; trig.CanCollide = false
+	CollectionService:AddTag(trig, "WorldPortal")
+	billboard(parent, pos + Vector3.new(0, 30, 0), label, accent, "[ ENTER ]", Color3.fromRGB(220, 220, 220))
+	return trig
+end
+
+local function tree(parent: Instance, pos: Vector3, canopyColor: Color3, canopyMat: Enum.Material)
+	part("Trunk", Vector3.new(3, 16, 3), pos + Vector3.new(0, 8, 0), Color3.fromRGB(110, 75, 50), Enum.Material.Wood, parent)
+	ball("Canopy", 14, pos + Vector3.new(0, 18, 0), canopyColor, canopyMat, parent)
+end
+
+local rng = Random.new(20260610)
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- WORLD 1 — MORTAL EARTH  (Y = 0)
 -- ══════════════════════════════════════════════════════════════════════════════
 local w1 = Instance.new("Folder"); w1.Name = "World1_MortalEarth"; w1.Parent = world
 
--- Vast ground plate
-part("W1Ground", Vector3.new(2000, 4, 2000), Vector3.new(0, Y1 - 2, 0),
-	Color3.fromRGB(200, 240, 215), Enum.Material.Grass, w1)
+part("Ground", Vector3.new(4000, 4, 4000), Vector3.new(0, Y1 - 2, 0), Color3.fromRGB(30, 45, 20), Enum.Material.Grass, w1)
 
--- Central hub
-local hub     = WorldData.HUB_CENTER
-local hubY    = Y1 + 4
-local hubCtr  = Vector3.new(hub.X, hubY, hub.Z)
+-- ── SPAWN VILLAGE (central hub) ───────────────────────────────────────────────
+local hub    = WorldData.HUB_CENTER
+local hubY   = Y1 + 4
 local hubZone = Instance.new("Folder"); hubZone.Name = "Hub"; hubZone.Parent = w1
 
-cyl("HubPad",  WorldData.HUB_RADIUS * 2,     4, Vector3.new(hub.X, hubY/2 + Y1/2 + 2, hub.Z),
-	Color3.fromRGB(255,200,230), Enum.Material.SmoothPlastic, hubZone)
-cyl("HubRing", WorldData.HUB_RADIUS * 2 + 8, 2, Vector3.new(hub.X, hubY, hub.Z),
-	Color3.fromRGB(255,120,180), Enum.Material.Neon, hubZone)
-ball("HubGem",  12, hubCtr + Vector3.new(0,12,0), Color3.fromRGB(150,255,230), Enum.Material.Neon, hubZone)
+cyl("HubPad",  WorldData.HUB_RADIUS * 2,     4, Vector3.new(hub.X, hubY, hub.Z), Color3.fromRGB(245, 210, 180), Enum.Material.SmoothPlastic, hubZone)
+cyl("HubRing", WorldData.HUB_RADIUS * 2 + 6, 2, Vector3.new(hub.X, hubY + 2, hub.Z), Color3.fromRGB(255, 180, 80), Enum.Material.Neon, hubZone)
 
 for i = 0, 5 do
 	local a = i / 6 * math.pi * 2
 	local px = hub.X + math.cos(a) * (WorldData.HUB_RADIUS - 8)
 	local pz = hub.Z + math.sin(a) * (WorldData.HUB_RADIUS - 8)
-	part("HubPillar",    Vector3.new(4,22,4), Vector3.new(px, hubY+11, pz),
-		Color3.fromRGB(255,255,255), Enum.Material.SmoothPlastic, hubZone)
-	ball("HubPillarTop", 6, Vector3.new(px, hubY+23, pz),
-		Color3.fromRGB(150,255,230), Enum.Material.Neon, hubZone)
+	part("Pillar", Vector3.new(4, 22, 4), Vector3.new(px, hubY + 11, pz), Color3.fromRGB(255, 255, 255), Enum.Material.SmoothPlastic, hubZone)
+	ball("PillarTop", 6, Vector3.new(px, hubY + 23, pz), Color3.fromRGB(150, 255, 230), Enum.Material.Neon, hubZone)
 end
 
-do  -- hub sign
-	local sign = part("HubSign", Vector3.new(28,6,1),
-		Vector3.new(hub.X, hubY+22, hub.Z), Color3.fromRGB(255,255,255),
-		Enum.Material.SmoothPlastic, hubZone)
-	sign.CanCollide = false
-	local sg = Instance.new("SurfaceGui"); sg.Face = Enum.NormalId.Front
-	sg.AlwaysOnTop = false; sg.Parent = sign
-	local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.fromScale(1,1)
-	lbl.BackgroundTransparency = 1; lbl.Text = "☯️  CULTIVATION HUB"
-	lbl.TextColor3 = Color3.fromRGB(120,60,160); lbl.TextScaled = true
+local HOUSE_NAMES = { "茶館", "武具店", "藥鋪", "客棧", "丹房", "書齋", "鐵匠", "靈獸鋪" }
+for i = 1, 8 do
+	local a  = (i - 1) / 8 * math.pi * 2
+	local px = hub.X + math.cos(a) * 35
+	local pz = hub.Z + math.sin(a) * 35
+	local house = part("House", Vector3.new(14, 10, 14), Vector3.new(px, Y1 + 5, pz), Color3.fromRGB(120, 80, 55), Enum.Material.Wood, hubZone)
+	local roof = part("Roof", Vector3.new(18, 2, 18), Vector3.new(px, Y1 + 11, pz), Color3.fromRGB(150, 50, 45), Enum.Material.Slate, hubZone)
+	roof.CanCollide = false
+	local sg = Instance.new("SurfaceGui"); sg.Face = Enum.NormalId.Front; sg.Adornee = house; sg.Parent = house
+	local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.fromScale(1, 1); lbl.BackgroundTransparency = 1
+	lbl.Text = HOUSE_NAMES[i]; lbl.TextColor3 = Color3.fromRGB(255, 230, 180); lbl.TextScaled = true
 	lbl.Font = Enum.Font.GothamBlack; lbl.Parent = sg
 end
 
--- World 1 realm zones — positions match WorldData.ZoneCenter() exactly
+cyl("Well", 6, 4, Vector3.new(hub.X, Y1 + 2, hub.Z), Color3.fromRGB(140, 120, 100), Enum.Material.Slate, hubZone)
+cyl("WellWater", 5, 3, Vector3.new(hub.X, Y1 + 2.6, hub.Z), Color3.fromRGB(80, 140, 180), Enum.Material.Water, hubZone)
+
+for i = 1, 6 do
+	local a  = (i - 1) / 6 * math.pi * 2 + 0.4
+	tree(hubZone, Vector3.new(hub.X + math.cos(a) * 22, Y1, hub.Z + math.sin(a) * 22), Color3.fromRGB(255, 180, 200), Enum.Material.Neon)
+end
+
+do  -- Providence Roll Shrine
+	local sx, sz = hub.X, hub.Z - 18
+	for step = 1, 3 do
+		cyl("ProvStep", 16 - step * 3, 1.4, Vector3.new(sx, Y1 + step * 1.4 - 0.7, sz), Color3.fromRGB(220, 200, 170), Enum.Material.Marble, hubZone)
+	end
+	for _, dx in ipairs({ -7, 7 }) do
+		cyl("Lantern", 2.4, 4, Vector3.new(sx + dx, Y1 + 7, sz), Color3.fromRGB(255, 60, 60), Enum.Material.Neon, hubZone)
+	end
+	part("ProvidenceShrine", Vector3.new(6, 5, 1.5), Vector3.new(sx, Y1 + 8, sz), Color3.fromRGB(255, 215, 120), Enum.Material.Neon, hubZone).CanCollide = false
+	billboard(hubZone, Vector3.new(sx, Y1 + 13, sz), "🎲 Providence", Color3.fromRGB(255, 215, 120))
+end
+
+do  -- Han Jue's Shrine
+	local sx, sz = hub.X + 20, hub.Z + 20
+	cyl("ShrinePad", 8, 1, Vector3.new(sx, Y1 + 0.5, sz), Color3.fromRGB(40, 30, 60), Enum.Material.Marble, hubZone)
+	local shrine = ball("HanJueShrine", 8, Vector3.new(sx, Y1 + 14, sz), Color3.fromRGB(255, 210, 60), Enum.Material.Neon, hubZone)
+	CollectionService:AddTag(shrine, "Shrine")
+	billboard(hubZone, Vector3.new(sx, Y1 + 20, sz), "📖 Book of Misfortune", Color3.fromRGB(255, 210, 60), "Pray daily for +100 Karma", Color3.fromRGB(255, 240, 200))
+	local LORE = { "韓絕", "孤獨", "長生", "天道", "因果", "逍遙" }
+	for i = 1, 6 do
+		local a = (i - 1) / 6 * math.pi * 2
+		signBoard(hubZone, Vector3.new(sx + math.cos(a) * 10, Y1 + 4, sz + math.sin(a) * 10), Vector3.new(3, 6, 0.6), LORE[i], Color3.fromRGB(200, 180, 255), Color3.fromRGB(50, 40, 70))
+	end
+end
+
+do  -- Wall of Eternity
+	local wx, wz = hub.X - 40, hub.Z
+	local wall = part("WallOfEternity", Vector3.new(2, 8, 60), Vector3.new(wx, Y1 + 4, wz), Color3.fromRGB(120, 105, 70), Enum.Material.Marble, hubZone)
+	part("WallGlow", Vector3.new(1, 9, 62), Vector3.new(wx - 1.4, Y1 + 4, wz), Color3.fromRGB(255, 210, 90), Enum.Material.Neon, hubZone)
+	local sg = Instance.new("SurfaceGui"); sg.Name = "WallSurface"; sg.Face = Enum.NormalId.Left
+	sg.CanvasSize = Vector2.new(800, 1200); sg.Adornee = wall; sg.Parent = wall
+	local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 90); title.BackgroundTransparency = 1
+	title.Text = "✨ WALL OF ETERNITY ✨"; title.TextColor3 = Color3.fromRGB(255, 220, 120); title.TextScaled = true
+	title.Font = Enum.Font.GothamBlack; title.Parent = sg
+	local list = Instance.new("ScrollingFrame"); list.Name = "Names"; list.Position = UDim2.new(0, 0, 0, 100)
+	list.Size = UDim2.new(1, 0, 1, -100); list.BackgroundTransparency = 1; list.BorderSizePixel = 0
+	list.ScrollBarThickness = 6; list.CanvasSize = UDim2.new(); list.AutomaticCanvasSize = Enum.AutomaticSize.Y; list.Parent = sg
+	local ll = Instance.new("UIListLayout"); ll.Padding = UDim.new(0, 6); ll.HorizontalAlignment = Enum.HorizontalAlignment.Center; ll.Parent = list
+	CollectionService:AddTag(wall, "WallOfEternity")
+end
+
+-- ── REALM ZONES (one platform per realm, themed into 5 biomes) ─────────────────
+type Biome = { floor: Color3, border: Color3, name: string }
+local function biomeFor(realmId: number): Biome
+	if realmId <= 2 then
+		return { floor = Color3.fromRGB(140, 200, 100), border = Color3.fromRGB(80, 200, 120), name = "Spirit Forest" }
+	elseif realmId == 3 then
+		return { floor = Color3.fromRGB(160, 210, 100), border = Color3.fromRGB(100, 200, 60), name = "Bamboo Valley" }
+	elseif realmId <= 5 then
+		return { floor = Color3.fromRGB(180, 160, 120), border = Color3.fromRGB(255, 200, 90), name = "Core Mountains" }
+	elseif realmId <= 7 then
+		return { floor = Color3.fromRGB(40, 20, 70), border = Color3.fromRGB(140, 0, 255), name = "Void Borderlands" }
+	else
+		return { floor = Color3.fromRGB(70, 60, 60), border = Color3.fromRGB(255, 210, 0), name = "Tribulation Peak" }
+	end
+end
+
+local zr = WorldData.ZONE_RADIUS
+local zh = WorldData.ZONE_HEIGHT
+
 for _, realmId in ipairs(WorldData.Realms()) do
-	local center = WorldData.ZoneCenter(realmId)   -- Y=0 already from WorldData
-	local theme  = WorldData.Theme(realmId)
+	local center = WorldData.ZoneCenter(realmId)
 	local realm  = CultivationData.GetRealm(realmId)
-	local zr     = WorldData.ZONE_RADIUS
-	local zh     = WorldData.ZONE_HEIGHT
-	local zBase  = Y1 + zh / 2
+	local biome  = biomeFor(realmId)
+	local lift   = realmId >= 8 and 16 or 0
 
 	local zone = Instance.new("Folder"); zone.Name = "Zone_" .. realmId; zone.Parent = w1
 
-	-- Platform + glow border
-	cyl("Floor",  zr*2,   zh, Vector3.new(center.X, zBase,    center.Z), theme.floor,   Enum.Material.SmoothPlastic, zone)
-	cyl("Border", zr*2+6, 3,  Vector3.new(center.X, Y1+zh,    center.Z), theme.accent,  Enum.Material.Neon, zone)
+	cyl("Floor",  zr * 2,     zh, Vector3.new(center.X, Y1 + zh / 2 + lift, center.Z), biome.floor, Enum.Material.SmoothPlastic, zone)
+	cyl("Border", zr * 2 + 6, 3,  Vector3.new(center.X, Y1 + zh + lift, center.Z), biome.border, Enum.Material.Neon, zone)
 
-	-- Boundary posts
 	for i = 0, 15 do
 		local a = i / 16 * math.pi * 2
-		local px = center.X + math.cos(a) * (zr - 2)
-		local pz = center.Z + math.sin(a) * (zr - 2)
-		part("Post", Vector3.new(2.5,8,2.5), Vector3.new(px, Y1+zh+4, pz),
-			theme.accent, Enum.Material.Neon, zone)
+		part("Post", Vector3.new(2.5, 8, 2.5), Vector3.new(center.X + math.cos(a) * (zr - 2), Y1 + zh + 4 + lift, center.Z + math.sin(a) * (zr - 2)), biome.border, Enum.Material.Neon, zone)
 	end
 
-	-- Centre feature
-	ball("ZoneOrb",   14, Vector3.new(center.X, Y1+zh+12, center.Z), theme.accent,         Enum.Material.Neon, zone)
-	part("ZoneSpire",  Vector3.new(3,26,3), Vector3.new(center.X, Y1+zh+13, center.Z),
-		Color3.fromRGB(255,255,255), Enum.Material.SmoothPlastic, zone)
+	billboard(zone, Vector3.new(center.X, Y1 + zh + 30 + lift, center.Z), ("R%d · %s"):format(realmId, realm and realm.name or "?"), biome.border, biome.name, Color3.fromRGB(255, 255, 255))
 
-	-- Portal arch facing hub
-	local dir = (Vector3.new(hub.X,0,hub.Z) - Vector3.new(center.X,0,center.Z))
-	dir = dir.Magnitude > 0 and dir.Unit or Vector3.new(0,0,1)
-	local gatePos = Vector3.new(center.X, Y1, center.Z) + dir * (zr - 4)
-	portalArch(zone, gatePos, theme.accent,
-		("R%d · %s"):format(realmId, realm and realm.name or "?"))
-
-	-- Billboard above zone
-	billboard3d(zone,
-		Vector3.new(center.X, Y1+zh+32, center.Z),
-		("R%d · %s"):format(realmId, realm and realm.name or "?"), theme.accent,
-		theme.name, Color3.fromRGB(255,255,255))
-
-	-- Candy bridge hub → gate
+	local dir = (Vector3.new(hub.X, 0, hub.Z) - Vector3.new(center.X, 0, center.Z))
+	dir = dir.Magnitude > 0 and dir.Unit or Vector3.new(0, 0, 1)
 	local from = Vector3.new(hub.X, Y1, hub.Z) + dir * WorldData.HUB_RADIUS
-	local to   = gatePos
+	local to   = Vector3.new(center.X, Y1, center.Z) + dir * zr
 	local mid  = (from + to) * 0.5
 	local len  = (to - from).Magnitude
-	local bridge = part("Bridge", Vector3.new(10, 2, len),
-		Vector3.new(mid.X, Y1+zh-1, mid.Z), theme.floor, Enum.Material.SmoothPlastic, zone)
-	bridge.CFrame = CFrame.lookAt(Vector3.new(mid.X,Y1+zh-1,mid.Z), Vector3.new(to.X,Y1+zh-1,to.Z))
-	bridge.Size   = Vector3.new(10, 2, len)
+	local bridge = part("Bridge", Vector3.new(10, 2, len), Vector3.new(mid.X, Y1 + zh - 1, mid.Z), biome.floor, Enum.Material.SmoothPlastic, zone)
+	bridge.CFrame = CFrame.lookAt(Vector3.new(mid.X, Y1 + zh - 1, mid.Z), Vector3.new(to.X, Y1 + zh - 1, to.Z))
+	bridge.Size = Vector3.new(10, 2, len)
+
+	if realmId < 9 then
+		local nextCenter = WorldData.ZoneCenter(realmId + 1)
+		local bdir = (Vector3.new(nextCenter.X, 0, nextCenter.Z) - Vector3.new(center.X, 0, center.Z))
+		bdir = bdir.Magnitude > 0 and bdir.Unit or Vector3.new(0, 0, 1)
+		local bpos = Vector3.new(center.X, Y1, center.Z) + bdir * (zr + 8)
+		part("BarrierL", Vector3.new(4, 20, 4), bpos + Vector3.new(-8, 10, 0), Color3.fromRGB(100, 90, 80), Enum.Material.Rock, zone)
+		part("BarrierR", Vector3.new(4, 20, 4), bpos + Vector3.new( 8, 10, 0), Color3.fromRGB(100, 90, 80), Enum.Material.Rock, zone)
+		part("BarrierTop", Vector3.new(20, 4, 4), bpos + Vector3.new(0, 21, 0), Color3.fromRGB(100, 90, 80), Enum.Material.Rock, zone)
+		local ring = cyl("BarrierRing", 14, 1, bpos + Vector3.new(0, 0.6, 0), Color3.fromRGB(255, 210, 60), Enum.Material.Neon, zone)
+		ring.Orientation = Vector3.new(0, 0, 0)
+		local trig = part("RealmBarrier", Vector3.new(16, 18, 3), bpos + Vector3.new(0, 9, 0), Color3.fromRGB(255, 210, 60), Enum.Material.ForceField, zone)
+		trig.Transparency = 0.7; trig.CanCollide = false
+		trig:SetAttribute("ReqRealm", realmId + 1)
+		CollectionService:AddTag(trig, "RealmBarrier")
+		signBoard(zone, bpos + Vector3.new(0, 24, 0), Vector3.new(14, 4, 0.5), ("Realm %d Required"):format(realmId + 1), Color3.fromRGB(255, 230, 150), Color3.fromRGB(40, 35, 25))
+	end
 end
 
--- Spawn at hub (World 1)
+-- ── ZONE 1 · SPIRIT FOREST ────────────────────────────────────────────────────
+do
+	local c = WorldData.ZoneCenter(1)
+	local zone = w1:FindFirstChild("Zone_1") :: Folder
+	for _ = 1, 20 do
+		local a, r = rng:NextNumber(0, math.pi * 2), rng:NextNumber(8, zr - 12)
+		tree(zone, Vector3.new(c.X + math.cos(a) * r, Y1 + zh, c.Z + math.sin(a) * r), Color3.fromRGB(120, 255, 180), Enum.Material.Neon)
+	end
+	for _ = 1, 12 do
+		local a, r = rng:NextNumber(0, math.pi * 2), rng:NextNumber(6, zr - 10)
+		local crystal = part("QiCrystal", Vector3.new(2, 8, 2), Vector3.new(c.X + math.cos(a) * r, Y1 + zh + 4, c.Z + math.sin(a) * r), Color3.fromRGB(100, 220, 255), Enum.Material.Neon, zone)
+		crystal.Orientation = Vector3.new(rng:NextNumber(-15, 15), 0, rng:NextNumber(-15, 15))
+	end
+	local d = c + Vector3.new(45, 0, 0)
+	part("CaveL", Vector3.new(4, 16, 4), Vector3.new(d.X - 6, Y1 + zh + 8, d.Z), Color3.fromRGB(70, 70, 80), Enum.Material.Rock, zone)
+	part("CaveR", Vector3.new(4, 16, 4), Vector3.new(d.X + 6, Y1 + zh + 8, d.Z), Color3.fromRGB(70, 70, 80), Enum.Material.Rock, zone)
+	part("CaveTop", Vector3.new(16, 4, 4), Vector3.new(d.X, Y1 + zh + 17, d.Z), Color3.fromRGB(70, 70, 80), Enum.Material.Rock, zone)
+	signBoard(zone, Vector3.new(d.X, Y1 + zh + 22, d.Z), Vector3.new(14, 4, 0.5), "Cave of Qi [Dungeon R1-2]", Color3.fromRGB(120, 220, 255), Color3.fromRGB(20, 30, 40))
+
+	local wf = c + Vector3.new(-46, 0, -10)
+	local fall = cyl("Waterfall", 10, 30, Vector3.new(wf.X, Y1 + zh + 15, wf.Z), Color3.fromRGB(220, 240, 255), Enum.Material.Neon, zone)
+	fall.Orientation = Vector3.new(0, 0, 0); fall.Transparency = 0.6; fall.CanCollide = false
+	local gate = part("GrottoTrigger", Vector3.new(10, 14, 3), Vector3.new(wf.X, Y1 + zh + 7, wf.Z + 3), Color3.fromRGB(40, 60, 80), Enum.Material.ForceField, zone)
+	gate.Transparency = 0.5; gate.CanCollide = false
+	CollectionService:AddTag(gate, "GrottoTrigger")
+	for i = 1, 3 do
+		local stone = part("QiStone", Vector3.new(3, 3, 3), Vector3.new(wf.X - 12 + i * 6, Y1 + zh + 2, wf.Z + 10), Color3.fromRGB(80, 160, 220), Enum.Material.Neon, zone)
+		stone:SetAttribute("Order", i)
+		CollectionService:AddTag(stone, "QiStone")
+	end
+end
+
+-- ── ZONE 2 · BAMBOO VALLEY + SECT GATES ───────────────────────────────────────
+do
+	local c = WorldData.ZoneCenter(2)
+	local zone = w1:FindFirstChild("Zone_2") :: Folder
+	for _ = 1, 16 do
+		local a, r = rng:NextNumber(0, math.pi * 2), rng:NextNumber(8, zr - 12)
+		local bx, bz = c.X + math.cos(a) * r, c.Z + math.sin(a) * r
+		for _ = 1, rng:NextInteger(3, 5) do
+			part("Bamboo", Vector3.new(2, 24, 2), Vector3.new(bx + rng:NextNumber(-3, 3), Y1 + zh + 12, bz + rng:NextNumber(-3, 3)), Color3.fromRGB(100, 180, 60), Enum.Material.Grass, zone)
+		end
+	end
+	local g1 = c + Vector3.new(0, 0, -40)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		part("SixPathsWall", Vector3.new(3, 18, 8), Vector3.new(g1.X + math.cos(a) * 8, Y1 + zh + 9, g1.Z + math.sin(a) * 8), Color3.fromRGB(160, 80, 255), Enum.Material.Neon, zone)
+	end
+	part("SixPathsSpire", Vector3.new(3, 14, 3), Vector3.new(g1.X, Y1 + zh + 24, g1.Z), Color3.fromRGB(200, 140, 255), Enum.Material.Neon, zone)
+	billboard(zone, Vector3.new(g1.X, Y1 + zh + 34, g1.Z), "☯️ Six Paths Hidden Sect", Color3.fromRGB(180, 120, 255))
+	local g2 = c + Vector3.new(38, 0, 0)
+	cyl("CalamityCrater", 20, 4, Vector3.new(g2.X, Y1 + zh - 1, g2.Z), Color3.fromRGB(120, 30, 20), Enum.Material.Rock, zone)
+	cyl("CalamityRing", 22, 2, Vector3.new(g2.X, Y1 + zh + 1, g2.Z), Color3.fromRGB(220, 60, 40), Enum.Material.Neon, zone)
+	billboard(zone, Vector3.new(g2.X, Y1 + zh + 12, g2.Z), "💫 Calamity Star Sect", Color3.fromRGB(255, 90, 70))
+	local g3 = c + Vector3.new(0, 0, 40)
+	cyl("WaterPool", 18, 2, Vector3.new(g3.X, Y1 + zh, g3.Z), Color3.fromRGB(60, 150, 255), Enum.Material.Water, zone)
+	part("WaterArchL", Vector3.new(3, 16, 3), Vector3.new(g3.X - 7, Y1 + zh + 8, g3.Z), Color3.fromRGB(80, 180, 255), Enum.Material.Neon, zone)
+	part("WaterArchR", Vector3.new(3, 16, 3), Vector3.new(g3.X + 7, Y1 + zh + 8, g3.Z), Color3.fromRGB(80, 180, 255), Enum.Material.Neon, zone)
+	part("WaterArchTop", Vector3.new(17, 3, 3), Vector3.new(g3.X, Y1 + zh + 17, g3.Z), Color3.fromRGB(80, 180, 255), Enum.Material.Neon, zone)
+	billboard(zone, Vector3.new(g3.X, Y1 + zh + 24, g3.Z), "💧 Water Spirit Sect", Color3.fromRGB(120, 200, 255))
+	local g4 = c + Vector3.new(-zr - 20, 0, 0)
+	part("LoneStarTower", Vector3.new(6, 40, 6), Vector3.new(g4.X, Y1 + 20, g4.Z), Color3.fromRGB(235, 235, 245), Enum.Material.Marble, zone)
+	ball("LoneStarTop", 8, Vector3.new(g4.X, Y1 + 42, g4.Z), Color3.fromRGB(255, 220, 120), Enum.Material.Neon, zone)
+	billboard(zone, Vector3.new(g4.X, Y1 + 50, g4.Z), "⭐ Lone Star Sect", Color3.fromRGB(255, 230, 150))
+	local d = c + Vector3.new(-40, 0, -20)
+	part("IronFortress", Vector3.new(20, 14, 14), Vector3.new(d.X, Y1 + zh + 7, d.Z), Color3.fromRGB(80, 70, 60), Enum.Material.DiamondPlate, zone)
+	signBoard(zone, Vector3.new(d.X, Y1 + zh + 18, d.Z), Vector3.new(16, 4, 0.5), "Iron Fortress [Dungeon R2-3]", Color3.fromRGB(200, 190, 170), Color3.fromRGB(35, 30, 25))
+end
+
+-- ── ZONE 3 · CORE MOUNTAINS ───────────────────────────────────────────────────
+do
+	local c = WorldData.ZoneCenter(3)
+	local zone = w1:FindFirstChild("Zone_3") :: Folder
+	local peakX, peakZ, peakH = c.X, c.Z, 0
+	for i = 0, 6 do
+		local a = i / 7 * math.pi * 2
+		local h = rng:NextNumber(40, 120)
+		local mx, mz = c.X + math.cos(a) * (zr - 16), c.Z + math.sin(a) * (zr - 16)
+		part("Mountain", Vector3.new(28, h, 28), Vector3.new(mx, Y1 + h / 2, mz), Color3.fromRGB(160, 140, 100), Enum.Material.Rock, zone)
+		if h > peakH then peakH = h; peakX = mx; peakZ = mz end
+	end
+	for f = 1, 9 do
+		local dia = 20 - (f - 1) * 1.5
+		cyl("PagodaFloor", dia, 6, Vector3.new(peakX, Y1 + peakH + f * 7 - 3, peakZ), Color3.fromRGB(255, 210, 60), Enum.Material.Neon, zone)
+	end
+	part("PagodaSpire", Vector3.new(2, 12, 2), Vector3.new(peakX, Y1 + peakH + 9 * 7 + 4, peakZ), Color3.fromRGB(255, 240, 160), Enum.Material.Neon, zone)
+	billboard(zone, Vector3.new(peakX, Y1 + peakH + 9 * 7 + 14, peakZ), "🏯 Golden Core Pagoda", Color3.fromRGB(255, 220, 100), "9 Floors", Color3.fromRGB(255, 240, 200))
+	local d = c + Vector3.new(20, 0, 24)
+	part("LabyrinthArch", Vector3.new(14, 10, 4), Vector3.new(d.X, Y1 + zh + 5, d.Z), Color3.fromRGB(50, 45, 55), Enum.Material.Rock, zone)
+	signBoard(zone, Vector3.new(d.X, Y1 + zh + 13, d.Z), Vector3.new(16, 4, 0.5), "Nascent Soul Labyrinth [R4-5]", Color3.fromRGB(200, 180, 220), Color3.fromRGB(25, 22, 30))
+	local wbp = c + Vector3.new(-24, 0, 18)
+	cyl("WBPlateau", 36, 3, Vector3.new(wbp.X, Y1 + zh + 0.5, wbp.Z), Color3.fromRGB(100, 90, 70), Enum.Material.Rock, zone)
+	cyl("WBRing", 38, 1.5, Vector3.new(wbp.X, Y1 + zh + 2, wbp.Z), Color3.fromRGB(255, 160, 0), Enum.Material.Neon, zone)
+	billboard(zone, Vector3.new(wbp.X, Y1 + zh + 10, wbp.Z), "⚔️ World Boss Plateau", Color3.fromRGB(255, 170, 60))
+end
+
+-- ── ZONE 4 · VOID BORDERLANDS ─────────────────────────────────────────────────
+do
+	local c = WorldData.ZoneCenter(4)
+	local zone = w1:FindFirstChild("Zone_4") :: Folder
+	for i = 1, 8 do
+		local a = i / 8 * math.pi * 2
+		local s = part("SkyCrack", Vector3.new(4, 0.5, 30), Vector3.new(c.X + math.cos(a) * 20, Y1 + rng:NextNumber(60, 80), c.Z + math.sin(a) * 20), Color3.fromRGB(80, 0, 140), Enum.Material.Neon, zone)
+		s.Orientation = Vector3.new(rng:NextNumber(-40, 40), rng:NextNumber(0, 180), rng:NextNumber(-40, 40)); s.CanCollide = false
+	end
+	for _ = 1, 12 do
+		local a, r = rng:NextNumber(0, math.pi * 2), rng:NextNumber(6, zr - 8)
+		part("FloatRock", Vector3.new(rng:NextNumber(8, 20), rng:NextNumber(6, 12), rng:NextNumber(10, 18)), Vector3.new(c.X + math.cos(a) * r, Y1 + rng:NextNumber(15, 40), c.Z + math.sin(a) * r), Color3.fromRGB(50, 30, 80), Enum.Material.Rock, zone)
+	end
+	for _ = 1, 8 do
+		local a, r = rng:NextNumber(0, math.pi * 2), rng:NextNumber(6, zr - 8)
+		cyl("VoidFire", 3, 20, Vector3.new(c.X + math.cos(a) * r, Y1 + zh + 10, c.Z + math.sin(a) * r), Color3.fromRGB(140, 0, 255), Enum.Material.Neon, zone).Orientation = Vector3.new(0, 0, 0)
+	end
+	local d = c + Vector3.new(0, 0, 30)
+	cyl("VoidAbyss", 30, 4, Vector3.new(d.X, Y1 + zh - 3, d.Z), Color3.fromRGB(8, 4, 16), Enum.Material.Slate, zone)
+	signBoard(zone, Vector3.new(d.X, Y1 + zh + 8, d.Z), Vector3.new(16, 4, 0.5), "Void Abyss [Dungeon R6-7]", Color3.fromRGB(180, 100, 255), Color3.fromRGB(15, 8, 25))
+	local wb = c + Vector3.new(-26, 0, -10)
+	cyl("VoidWBRing", 30, 1.5, Vector3.new(wb.X, Y1 + zh + 1, wb.Z), Color3.fromRGB(255, 200, 0), Enum.Material.Neon, zone)
+	billboard(zone, Vector3.new(wb.X, Y1 + zh + 9, wb.Z), "⚔️ World Boss Spawn", Color3.fromRGB(255, 210, 60))
+end
+
+-- ── ZONE 5 · TRIBULATION PEAK ─────────────────────────────────────────────────
+do
+	local c = WorldData.ZoneCenter(5)
+	local zone = w1:FindFirstChild("Zone_5") :: Folder
+	local baseY = Y1 + zh + 16
+	for _ = 1, 14 do
+		local a, r = rng:NextNumber(0, math.pi * 2), rng:NextNumber(4, zr - 6)
+		local b = part("StormBolt", Vector3.new(1.5, rng:NextNumber(14, 22), 1.5), Vector3.new(c.X + math.cos(a) * r, baseY + rng:NextNumber(18, 34), c.Z + math.sin(a) * r), Color3.fromRGB(220, 220, 255), Enum.Material.Neon, zone)
+		b.Orientation = Vector3.new(rng:NextNumber(-25, 25), 0, rng:NextNumber(-25, 25)); b.CanCollide = false
+	end
+	for i = 0, 3 do
+		local a = i / 4 * math.pi * 2
+		local rx, rz = c.X + math.cos(a) * (zr - 8), c.Z + math.sin(a) * (zr - 8)
+		part("LightningRod", Vector3.new(2, 30, 2), Vector3.new(rx, baseY + 15, rz), Color3.fromRGB(255, 210, 0), Enum.Material.Neon, zone)
+		ball("RodTop", 4, Vector3.new(rx, baseY + 31, rz), Color3.fromRGB(255, 240, 120), Enum.Material.Neon, zone)
+	end
+	cyl("Arena", 40, 2, Vector3.new(c.X, baseY, c.Z), Color3.fromRGB(80, 70, 60), Enum.Material.Rock, zone)
+	for i = 0, 23 do
+		local a = i / 24 * math.pi * 2
+		part("ArenaWall", Vector3.new(3, 4, 3), Vector3.new(c.X + math.cos(a) * 21, baseY + 2, c.Z + math.sin(a) * 21), Color3.fromRGB(90, 80, 70), Enum.Material.Rock, zone)
+	end
+	local hg = cyl("HeavensGateGlow", 60, 2, Vector3.new(c.X, baseY + 60, c.Z), Color3.fromRGB(255, 240, 180), Enum.Material.Neon, zone)
+	hg.Orientation = Vector3.new(0, 0, 0); hg.CanCollide = false
+	cyl("HanJueAvatarPedestal", 8, 3, Vector3.new(c.X, baseY + 1.5, c.Z), Color3.fromRGB(120, 90, 160), Enum.Material.Marble, zone)
+	billboard(zone, Vector3.new(c.X, baseY + 10, c.Z), "⚔️ Han Jue [Avatar]", Color3.fromRGB(255, 210, 120), "R9 MYTHIC Boss", Color3.fromRGB(255, 240, 200))
+	zone:SetAttribute("PeakPosition", Vector3.new(c.X, baseY, c.Z))
+end
+
+-- ── UNDERGROUND · YELLOW SPRING / NETHERWORLD ─────────────────────────────────
+do
+	local nether = Instance.new("Folder"); nether.Name = "Netherworld"; nether.Parent = w1
+	local netherY = -80
+	local sf = WorldData.ZoneCenter(1) + Vector3.new(30, 0, 30)
+	part("Shaft", Vector3.new(16, 84, 16), Vector3.new(sf.X, netherY + 42, sf.Z), Color3.fromRGB(20, 18, 26), Enum.Material.Rock, nether).Transparency = 0.5
+	signBoard(nether, Vector3.new(sf.X, Y1 + zh + 4, sf.Z), Vector3.new(8, 3, 0.5), "↓ Netherworld", Color3.fromRGB(255, 200, 80), Color3.fromRGB(20, 18, 10))
+	part("NetherFloor", Vector3.new(600, 8, 600), Vector3.new(0, netherY, 0), Color3.fromRGB(10, 8, 16), Enum.Material.Slate, nether)
+	local prev = Vector3.new(-260, netherY + 5, -200)
+	for i = 1, 14 do
+		local nextP = prev + Vector3.new(38, 0, math.sin(i) * 30 + 10)
+		local mid = (prev + nextP) * 0.5
+		local len = (nextP - prev).Magnitude
+		local seg = part("YellowSpring", Vector3.new(10, 2, len), mid, Color3.fromRGB(255, 200, 0), Enum.Material.Neon, nether)
+		seg.CFrame = CFrame.lookAt(mid, nextP); seg.Size = Vector3.new(10, 2, len); seg.CanCollide = false
+		CollectionService:AddTag(seg, "YellowSpring")
+		prev = nextP
+	end
+	local island = Instance.new("Folder"); island.Name = "HiddenSectIsland"; island.Parent = nether
+	local ix, iz = 0, 40
+	cyl("IslandPad", 60, 6, Vector3.new(ix, netherY + 8, iz), Color3.fromRGB(30, 25, 40), Enum.Material.Rock, island)
+	part("CaveAbode", Vector3.new(20, 15, 20), Vector3.new(ix, netherY + 18, iz), Color3.fromRGB(50, 45, 60), Enum.Material.Rock, island)
+	billboard(island, Vector3.new(ix, netherY + 32, iz), "🏝️ Hidden Sect Island", Color3.fromRGB(160, 100, 220), "Six Paths members only", Color3.fromRGB(200, 180, 255))
+	island:SetAttribute("MeditationSpot", Vector3.new(ix, netherY + 11, iz))
+	CollectionService:AddTag(island, "HiddenSectIsland")
+	for _, info in ipairs({ { -18, "Ah Da" }, { 18, "Xiao Er" } }) do
+		local gx = ix + (info[1] :: number)
+		part("Guardian", Vector3.new(8, 30, 8), Vector3.new(gx, netherY + 23, iz - 22), Color3.fromRGB(20, 16, 28), Enum.Material.Slate, island)
+		ball("GuardianEye", 3, Vector3.new(gx, netherY + 34, iz - 18), Color3.fromRGB(255, 60, 0), Enum.Material.Neon, island)
+		billboard(island, Vector3.new(gx, netherY + 40, iz - 22), info[2] :: string, Color3.fromRGB(255, 90, 40))
+	end
+end
+
 local sp = Workspace:FindFirstChildOfClass("SpawnLocation") or Instance.new("SpawnLocation")
-sp.Anchored = true; sp.Size = Vector3.new(12,1,12)
-sp.Position = Vector3.new(hub.X, hubY+1, hub.Z)
+sp.Anchored = true; sp.Size = Vector3.new(12, 1, 12)
+sp.Position = Vector3.new(hub.X, hubY + 1, hub.Z)
 sp.Transparency = 1; sp.CanCollide = false; sp.Neutral = true; sp.Parent = w1
 
--- Portal arch up to World 2 (on hub platform)
-portalArch(hubZone, Vector3.new(hub.X + 30, hubY, hub.Z),
-	Color3.fromRGB(80,220,200), "↑  IMMORTAL SKY  (R10+)")
+portalArch(hubZone, "Portal_W1_to_W2", Vector3.new(hub.X + 30, hubY, hub.Z), Color3.fromRGB(80, 220, 200), "↑ HEAVEN'S GATE (R9·9 Required)")
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- WORLD 2 — IMMORTAL SKY  (Y = 1800)
 -- ══════════════════════════════════════════════════════════════════════════════
 local w2 = Instance.new("Folder"); w2.Name = "World2_ImmortalSky"; w2.Parent = world
-local W2Y = Y2
 
--- Main jade island
-cyl("JadeIsle",    600,  30, Vector3.new(0, W2Y+15, 0),
-	Color3.fromRGB(140,240,200), Enum.Material.SmoothPlastic, w2)
-cyl("JadeRim",     616,   8, Vector3.new(0, W2Y+30, 0),
-	Color3.fromRGB(80,220,160), Enum.Material.Neon, w2)
-ball("JadePeak",   40,       Vector3.new(0, W2Y+80,  0),
-	Color3.fromRGB(180,255,230), Enum.Material.Neon, w2)
-part("JadePalace", Vector3.new(80,60,80), Vector3.new(0, W2Y+60, 0),
-	Color3.fromRGB(220,255,245), Enum.Material.SmoothPlastic, w2)
+local cloud = cyl("CloudSea", 1200, 20, Vector3.new(0, Y2, 0), Color3.fromRGB(240, 245, 255), Enum.Material.SmoothPlastic, w2)
+cloud.Transparency = 0.3
 
--- Floating outer isles
-local isleColors = {
-	Color3.fromRGB(200,240,255), Color3.fromRGB(180,220,255),
-	Color3.fromRGB(255,240,200), Color3.fromRGB(220,200,255),
-	Color3.fromRGB(200,255,220), Color3.fromRGB(255,200,200),
-}
-for i = 1, 6 do
-	local a   = (i-1) / 6 * math.pi * 2
-	local rx  = math.cos(a) * 420
-	local rz  = math.sin(a) * 420
-	local ry  = W2Y + math.sin(i * 1.3) * 60
-	cyl("FloatIsle" .. i, 120, 18, Vector3.new(rx, ry, rz),
-		isleColors[i], Enum.Material.SmoothPlastic, w2)
-	ball("IsleOrb" .. i,  20,     Vector3.new(rx, ry+24, rz),
-		Color3.fromRGB(100,220,180), Enum.Material.Neon, w2)
-	-- Connecting beam to centre
-	local mid2  = Vector3.new(rx/2, (ry+W2Y+30)/2, rz/2)
-	local len2  = math.sqrt(rx*rx + (ry-W2Y-30)*(ry-W2Y-30) + rz*rz)
-	local beam  = part("IsleBeam" .. i, Vector3.new(4, len2, 4), mid2,
-		Color3.fromRGB(80,220,200), Enum.Material.Neon, w2)
-	beam.CFrame = CFrame.lookAt(mid2, Vector3.new(0, W2Y+30, 0)) *
-		CFrame.Angles(math.pi/2, 0, 0)
-	beam.Size   = Vector3.new(4, 4, len2)
+local av = WorldData.WORLD_ARRIVAL[2]
+cyl("W2ArrivalPad", 40, 6, Vector3.new(av.X, Y2 + 3, av.Z), Color3.fromRGB(140, 220, 180), Enum.Material.Marble, w2)
+for i = 0, 5 do
+	local a = i / 6 * math.pi * 2
+	cyl("ArrivalPillar", 6, 60, Vector3.new(av.X + math.cos(a) * 80, Y2 + 30, av.Z + math.sin(a) * 80), Color3.fromRGB(255, 210, 60), Enum.Material.Neon, w2).Orientation = Vector3.new(0, 0, 0)
+end
+part("HeavensGateL", Vector3.new(8, 80, 8), Vector3.new(av.X - 24, Y2 + 40, av.Z), Color3.fromRGB(255, 230, 120), Enum.Material.Neon, w2)
+part("HeavensGateR", Vector3.new(8, 80, 8), Vector3.new(av.X + 24, Y2 + 40, av.Z), Color3.fromRGB(255, 230, 120), Enum.Material.Neon, w2)
+part("HeavensGateTop", Vector3.new(56, 8, 8), Vector3.new(av.X, Y2 + 80, av.Z), Color3.fromRGB(255, 230, 120), Enum.Material.Neon, w2)
+billboard(w2, Vector3.new(av.X, Y2 + 92, av.Z), "⚡ Heaven's Gate", Color3.fromRGB(255, 230, 120), "Welcome, Immortal", Color3.fromRGB(255, 250, 220))
+cyl("ReincarnationPedestal", 6, 3, Vector3.new(av.X + 14, Y2 + 4.5, av.Z + 10), Color3.fromRGB(180, 220, 255), Enum.Material.Marble, w2)
+billboard(w2, Vector3.new(av.X + 14, Y2 + 11, av.Z + 10), "🧙 Ancient Immortal", Color3.fromRGB(180, 220, 255), "Reincarnation Guide", Color3.fromRGB(220, 235, 255))
+
+do
+	cyl("JadeIsle", 300, 12, Vector3.new(0, Y2 + 9, 0), Color3.fromRGB(160, 230, 200), Enum.Material.SmoothPlastic, w2)
+	for i = 0, 5 do
+		local a = i / 6 * math.pi * 2
+		local bx, bz = math.cos(a) * 90, math.sin(a) * 90
+		part("JadeBuilding", Vector3.new(40, 50, 40), Vector3.new(bx, Y2 + 40, bz), Color3.fromRGB(180, 240, 210), Enum.Material.Marble, w2)
+		part("JadeRoof", Vector3.new(48, 4, 48), Vector3.new(bx, Y2 + 66, bz), Color3.fromRGB(255, 220, 120), Enum.Material.Neon, w2).CanCollide = false
+		part("JadeSpire", Vector3.new(3, 14, 3), Vector3.new(bx, Y2 + 74, bz), Color3.fromRGB(255, 240, 180), Enum.Material.Neon, w2)
+	end
+	for i = 1, 8 do
+		local a = (i - 1) / 8 * math.pi * 2
+		local lx, lz = math.cos(a) * 50, math.sin(a) * 50
+		cyl("LotusPond", 20, 2, Vector3.new(lx, Y2 + 16, lz), Color3.fromRGB(100, 180, 255), Enum.Material.Water, w2).Orientation = Vector3.new(0, 0, 0)
+		ball("Lotus", 5, Vector3.new(lx, Y2 + 17, lz), Color3.fromRGB(255, 150, 200), Enum.Material.Neon, w2)
+	end
+	for i = 1, 40 do
+		local a, r = (i / 40) * math.pi * 2, rng:NextNumber(40, 140)
+		ball("JadeLantern", 3, Vector3.new(math.cos(a) * r, Y2 + 18, math.sin(a) * r), Color3.fromRGB(200, 255, 230), Enum.Material.Neon, w2)
+	end
+	local daoPortal = portalArch(w2, "DaoFieldPortal", Vector3.new(0, Y2 + 15, 120), Color3.fromRGB(100, 255, 200), "Personal Dao Field (R11)")
+	CollectionService:AddTag(daoPortal, "DaoFieldPortal")
 end
 
--- 33-layer heaven staircase pillars circling up
-for i = 1, 33 do
-	local a  = i / 33 * math.pi * 2
-	local px = math.cos(a) * 200
-	local pz = math.sin(a) * 200
-	local py = W2Y + 40 + i * 20
-	part("HeavenPillar" .. i, Vector3.new(6, 30, 6), Vector3.new(px, py, pz),
-		Color3.fromRGB(255, 255 - i*3, 200 - i*2), Enum.Material.SmoothPlastic, w2)
-	ball("HeavenGlobe" .. i, 8, Vector3.new(px, py+20, pz),
-		Color3.fromRGB(255,220,100), Enum.Material.Neon, w2)
+do
+	local ox = 500
+	part("ImmortalPlain", Vector3.new(400, 8, 400), Vector3.new(ox, Y2 + 4, 0), Color3.fromRGB(200, 220, 180), Enum.Material.Grass, w2)
+	for i = 1, 20 do
+		local a = (i / 20) * math.pi * 2
+		part("MountainSilhouette", Vector3.new(6, rng:NextNumber(40, 90), 30), Vector3.new(ox + math.cos(a) * 210, Y2 + 40, math.sin(a) * 210), Color3.fromRGB(120, 140, 100), Enum.Material.Rock, w2).CanCollide = false
+	end
+	part("HiddenSectHQ", Vector3.new(100, 30, 100), Vector3.new(ox, Y2 + 20, 0), Color3.fromRGB(140, 100, 180), Enum.Material.Marble, w2)
+	part("HQTower", Vector3.new(10, 60, 10), Vector3.new(ox, Y2 + 38, 0), Color3.fromRGB(160, 120, 200), Enum.Material.Marble, w2)
+	billboard(w2, Vector3.new(ox, Y2 + 74, 0), "🏯 Hundred Mountains Sect", Color3.fromRGB(190, 150, 240))
+	for i = 1, 6 do
+		cyl("Samsara", 16 - i, 6, Vector3.new(ox - 120, Y2 + 6 + i * 6, 80), Color3.fromRGB(60, 150, 255), Enum.Material.Neon, w2).Orientation = Vector3.new(0, 0, 0)
+	end
+	billboard(w2, Vector3.new(ox - 120, Y2 + 52, 80), "🌀 Samsara Space", Color3.fromRGB(100, 180, 255))
+	part("TrialsArch", Vector3.new(16, 12, 4), Vector3.new(ox + 120, Y2 + 10, -80), Color3.fromRGB(120, 100, 160), Enum.Material.Rock, w2)
+	signBoard(w2, Vector3.new(ox + 120, Y2 + 20, -80), Vector3.new(18, 4, 0.5), "Immortal Plain Trials [12 Floors]", Color3.fromRGB(210, 190, 255), Color3.fromRGB(30, 25, 40))
 end
 
--- Arrival pad & portal to World 1 and World 3
-cyl("W2ArrivalPad", 60, 6, Vector3.new(-100, W2Y+3, 0),
-	Color3.fromRGB(200,255,240), Enum.Material.SmoothPlastic, w2)
-portalArch(w2, Vector3.new(-100, W2Y, 0),
-	Color3.fromRGB(80,200,255), "↓ MORTAL EARTH  (R1-9)")
-portalArch(w2, Vector3.new(100, W2Y, 0),
-	Color3.fromRGB(180,100,255), "↑ SAGE HEAVEN  (R17+)")
+do
+	for layer = 1, 33 do
+		local t = (layer - 1) / 32
+		local ly = Y2 + 50 + (layer - 1) * 40
+		local dia = 200 - t * 100
+		local col = Color3.fromRGB(math.floor(180 + t * 75), math.floor(210 + t * 45), math.floor(255 - t * 15))
+		cyl("Heaven_" .. layer, dia, 6, Vector3.new(0, ly, -400), col, Enum.Material.SmoothPlastic, w2).Orientation = Vector3.new(0, 0, 0)
+		cyl("HeavenPortal_" .. layer, 20, 2, Vector3.new(0, ly + 4, -400), col, Enum.Material.Neon, w2).Orientation = Vector3.new(0, 0, 0)
+	end
+	for i = 0, 7 do
+		local a = i / 8 * math.pi * 2
+		part("HeavenColumn", Vector3.new(4, 1320, 4), Vector3.new(math.cos(a) * 90, Y2 + 50 + 660, -400 + math.sin(a) * 90), Color3.fromRGB(220, 230, 255), Enum.Material.Marble, w2)
+	end
+	local qy = Y2 + 50 + 32 * 40
+	part("QiankunHall", Vector3.new(120, 40, 80), Vector3.new(0, qy + 24, -400), Color3.fromRGB(255, 220, 100), Enum.Material.Neon, w2)
+	for i = 1, 12 do
+		local a = (i - 1) / 12 * math.pi * 2
+		part("LotusThrone", Vector3.new(6, 6, 6), Vector3.new(math.cos(a) * 40, qy + 8, -400 + math.sin(a) * 30), Color3.fromRGB(255, 240, 160), Enum.Material.Marble, w2)
+	end
+	billboard(w2, Vector3.new(0, qy + 54, -400), "🏛️ Qiankun Hall", Color3.fromRGB(255, 230, 130), "Sage Council", Color3.fromRGB(255, 250, 210))
+end
 
-billboard3d(w2, Vector3.new(0, W2Y+140, 0),
-	"✦  IMMORTAL SKY", Color3.fromRGB(100,255,200),
-	"Realm 10 — Realm 16", Color3.fromRGB(255,255,255))
+do
+	local ox, oz = -480, 200
+	for i = 1, 5 do
+		local a = (i / 5) * math.pi * 2
+		local dia = rng:NextNumber(40, 100)
+		cyl("EmperorIsle", dia, 10, Vector3.new(ox + math.cos(a) * 120, Y2 + 100 + math.sin(i) * 40, oz + math.sin(a) * 120), Color3.fromRGB(60, 50, 90), Enum.Material.Rock, w2).Orientation = Vector3.new(0, 0, 0)
+	end
+	cyl("CrowPlatform", 50, 6, Vector3.new(ox, Y2 + 100, oz), Color3.fromRGB(30, 25, 45), Enum.Material.Rock, w2).Orientation = Vector3.new(0, 0, 0)
+	cyl("CrowRing", 52, 2, Vector3.new(ox, Y2 + 104, oz), Color3.fromRGB(140, 60, 200), Enum.Material.Neon, w2).Orientation = Vector3.new(0, 0, 0)
+	billboard(w2, Vector3.new(ox, Y2 + 116, oz), "⚔️ Great Freedom Crow", Color3.fromRGB(180, 100, 240), "World Boss R16", Color3.fromRGB(220, 190, 255))
+	cyl("HanJueDaoField", 60, 8, Vector3.new(ox - 80, Y2 + 160, oz - 80), Color3.fromRGB(40, 30, 60), Enum.Material.Rock, w2).Orientation = Vector3.new(0, 0, 0)
+	cyl("DaoAura", 64, 2, Vector3.new(ox - 80, Y2 + 165, oz - 80), Color3.fromRGB(120, 60, 255), Enum.Material.Neon, w2).Orientation = Vector3.new(0, 0, 0)
+	billboard(w2, Vector3.new(ox - 80, Y2 + 178, oz - 80), "☯️ Han Jue's Dao Field", Color3.fromRGB(150, 100, 255), "R16+", Color3.fromRGB(220, 200, 255))
+	part("ChaosHorizon", Vector3.new(2000, 2, 8), Vector3.new(0, Y2 + 100, -900), Color3.fromRGB(10, 5, 20), Enum.Material.Neon, w2).CanCollide = false
+end
+
+portalArch(w2, "Portal_W2_to_W1", Vector3.new(av.X - 60, Y2 + 3, av.Z), Color3.fromRGB(120, 200, 120), "↓ Mortal Earth")
+portalArch(w2, "Portal_W2_to_W3", Vector3.new(av.X + 60, Y2 + 3, av.Z), Color3.fromRGB(180, 100, 255), "↑ Sage Heaven (R16)")
+billboard(w2, Vector3.new(0, Y2 + 140, 0), "✦ IMMORTAL SKY", Color3.fromRGB(100, 255, 200), "Realm 10 — 16", Color3.fromRGB(255, 255, 255))
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- WORLD 3 — SAGE HEAVEN  (Y = 3600)
 -- ══════════════════════════════════════════════════════════════════════════════
 local w3 = Instance.new("Folder"); w3.Name = "World3_SageHeaven"; w3.Parent = world
-local W3Y = Y3
 
--- Vast neon floor ring
-cyl("SageFloor",  700, 8, Vector3.new(0, W3Y+4, 0),
-	Color3.fromRGB(30,20,60), Enum.Material.SmoothPlastic, w3)
-cyl("SageGlow",   710, 4, Vector3.new(0, W3Y+8, 0),
-	Color3.fromRGB(120,60,255), Enum.Material.Neon, w3)
+cyl("SageFloor", 800, 6, Vector3.new(0, Y3 + 3, 0), Color3.fromRGB(20, 10, 40), Enum.Material.SmoothPlastic, w3)
+cyl("SageGlow", 810, 3, Vector3.new(0, Y3 + 6, 0), Color3.fromRGB(120, 60, 255), Enum.Material.Neon, w3)
 
--- Dao energy hollow sphere (shell of orbiting balls)
-for i = 1, 48 do
-	local phi   = math.acos(1 - 2*(i-1)/47)
-	local theta = math.pi * (1 + math.sqrt(5)) * (i-1)
-	local sr    = 280
-	local sx    = sr * math.sin(phi) * math.cos(theta)
-	local sy    = sr * math.cos(phi)
-	local sz    = sr * math.sin(phi) * math.sin(theta)
-	ball("DaoSphere" .. i, 12, Vector3.new(sx, W3Y+280+sy, sz),
-		Color3.fromHex(i % 2 == 0 and "A855F7" or "06B6D4"), Enum.Material.Neon, w3)
+do
+	part("MysticPalace", Vector3.new(120, 80, 120), Vector3.new(0, Y3 + 46, 0), Color3.fromRGB(30, 15, 60), Enum.Material.Marble, w3)
+	ball("MysticCore", 40, Vector3.new(0, Y3 + 100, 0), Color3.fromRGB(200, 100, 255), Enum.Material.Neon, w3)
+	local daoColors = { Color3.fromRGB(255, 215, 90), Color3.fromRGB(170, 100, 255), Color3.fromRGB(100, 220, 255) }
+	for i = 1, 20 do
+		local a = (i / 20) * math.pi * 2
+		local r = rng:NextNumber(70, 130)
+		local d = part("DaoLine", Vector3.new(2, 0.5, 80), Vector3.new(math.cos(a) * r, Y3 + rng:NextNumber(10, 80), math.sin(a) * r), daoColors[(i % 3) + 1], Enum.Material.Neon, w3)
+		d.Orientation = Vector3.new(0, rng:NextNumber(0, 180), 0); d.CanCollide = false
+	end
+	local board = part("SageSeatsBoard", Vector3.new(40, 20, 1), Vector3.new(0, Y3 + 30, 66), Color3.fromRGB(40, 30, 20), Enum.Material.Marble, w3)
+	board.CanCollide = false
+	local sg = Instance.new("SurfaceGui"); sg.Name = "BoardSurface"; sg.Face = Enum.NormalId.Front; sg.Adornee = board; sg.Parent = board
+	local lbl = Instance.new("TextLabel"); lbl.Name = "Status"; lbl.Size = UDim2.fromScale(1, 1)
+	lbl.BackgroundTransparency = 1; lbl.Text = "Sage Seats Available: 12/12"
+	lbl.TextColor3 = Color3.fromRGB(255, 215, 120); lbl.TextScaled = true; lbl.Font = Enum.Font.GothamBlack; lbl.Parent = sg
+	CollectionService:AddTag(board, "SageSeatsBoard")
+	for i = 1, 12 do
+		local a = (i - 1) / 12 * math.pi * 2
+		cyl("SageThrone", 8, 3, Vector3.new(math.cos(a) * 45, Y3 + 8, math.sin(a) * 45), Color3.fromRGB(60, 40, 90), Enum.Material.Marble, w3).Orientation = Vector3.new(0, 0, 0)
+		ball("SageMarker", 5, Vector3.new(math.cos(a) * 45, Y3 + 14, math.sin(a) * 45), Color3.fromRGB(200, 150, 255), Enum.Material.Neon, w3)
+	end
+	billboard(w3, Vector3.new(0, Y3 + 130, 0), "⋆ Mystic Divine Palace", Color3.fromRGB(200, 120, 255), "R17 · Sage", Color3.fromRGB(240, 220, 255))
 end
 
--- Zenith rings
-for r = 1, 4 do
-	local ry  = W3Y + 200 + r * 60
-	local rdia = 600 - r * 80
-	cyl("ZenithRing" .. r, rdia, 4, Vector3.new(0, ry, 0),
-		Color3.fromHex(r % 2 == 0 and "C084FC" or "67E8F9"), Enum.Material.Neon, w3)
+do
+	local ox, oz = 300, -200
+	for i = 1, 5 do
+		local a = (i / 5) * math.pi * 2
+		cyl("ZenithIsle", rng:NextNumber(30, 60), 8, Vector3.new(ox + math.cos(a) * 120, Y3 + rng:NextNumber(20, 80), oz + math.sin(a) * 120), Color3.fromRGB(60, 40, 100), Enum.Material.Rock, w3).Orientation = Vector3.new(0, 0, 0)
+	end
+	for i = 1, 8 do
+		local a = (i / 8) * math.pi * 2
+		local q = cyl("PrimordialPurpleQi", 2, 60, Vector3.new(ox + math.cos(a) * 80, Y3 + 40, oz + math.sin(a) * 80), Color3.fromRGB(180, 0, 255), Enum.Material.ForceField, w3)
+		q.Orientation = Vector3.new(0, 0, 0); q.Transparency = 0.3
+		CollectionService:AddTag(q, "PrimordialPurpleQi")
+	end
+	billboard(w3, Vector3.new(ox, Y3 + 110, oz), "💜 Primordial Chaos Purple Qi", Color3.fromRGB(200, 80, 255), "Ultra-rare · 0.01%", Color3.fromRGB(230, 190, 255))
+	for _ = 1, 14 do
+		local f = part("RealityFlicker", Vector3.new(rng:NextNumber(6, 14), rng:NextNumber(6, 14), 0.5), Vector3.new(ox + rng:NextNumber(-150, 150), Y3 + rng:NextNumber(20, 90), oz + rng:NextNumber(-150, 150)), Color3.fromRGB(255, 255, 255), Enum.Material.Neon, w3)
+		f.Transparency = 0.85; f.CanCollide = false
+	end
 end
 
--- Orbiting crystal pillars
-for i = 1, 12 do
-	local a  = i / 12 * math.pi * 2
-	local px = math.cos(a) * 240
-	local pz = math.sin(a) * 240
-	local py = W3Y + 40
-	part("DaoPillar" .. i, Vector3.new(5, 80, 5), Vector3.new(px, py+40, pz),
-		Color3.fromRGB(180, 80, 255), Enum.Material.Neon, w3)
-	ball("DaoCrystal" .. i, 16, Vector3.new(px, py+90, pz),
-		Color3.fromHex(i % 3 == 0 and "F0ABFC" or (i % 3 == 1 and "67E8F9" or "FDE68A")),
-		Enum.Material.Neon, w3)
+do
+	part("ChaosOcean", Vector3.new(2000, 2, 2000), Vector3.new(0, Y3 - 200, 0), Color3.fromRGB(6, 4, 14), Enum.Material.Neon, w3).CanCollide = false
+	local daoColors = { Color3.fromRGB(255, 215, 90), Color3.fromRGB(100, 220, 255), Color3.fromRGB(170, 100, 255), Color3.fromRGB(255, 80, 80), Color3.fromRGB(100, 255, 150) }
+	for i = 1, 30 do
+		local a = (i / 30) * math.pi * 2
+		local d = part("GreatDaoLine", Vector3.new(1.5, 1.5, rng:NextNumber(200, 400)), Vector3.new(math.cos(a) * 250, Y3 + rng:NextNumber(-100, 150), math.sin(a) * 250), daoColors[(i % 5) + 1], Enum.Material.Neon, w3)
+		d.CFrame = CFrame.lookAt(d.Position, Vector3.new(0, Y3, 0)); d.CanCollide = false
+	end
+	local tp = Vector3.new(-300, Y3 + 6, 300)
+	cyl("TranscendentPlatform", 40, 4, tp, Color3.fromRGB(40, 30, 60), Enum.Material.Rock, w3).Orientation = Vector3.new(0, 0, 0)
+	cyl("TranscendentAura", 44, 2, tp + Vector3.new(0, 3, 0), Color3.fromRGB(255, 255, 255), Enum.Material.Neon, w3).Orientation = Vector3.new(0, 0, 0)
+	billboard(w3, tp + Vector3.new(0, 14, 0), "⚪ Transcendent Dao Expert", Color3.fromRGB(255, 255, 255))
 end
 
--- Central Sage Hall
-part("SageHall", Vector3.new(100,100,100), Vector3.new(0, W3Y+50, 0),
-	Color3.fromRGB(20,10,40), Enum.Material.SmoothPlastic, w3)
-ball("SageCore",  60, Vector3.new(0, W3Y+120, 0),
-	Color3.fromRGB(200,100,255), Enum.Material.Neon, w3)
+do
+	local sx, sz = 0, 300
+	local plY = Y3 + 60
+	part("SupremePillar", Vector3.new(12, 60, 12), Vector3.new(sx, Y3 + 30, sz), Color3.fromRGB(20, 0, 40), Enum.Material.Rock, w3)
+	cyl("SupremePlatform", 100, 6, Vector3.new(sx, plY, sz), Color3.fromRGB(35, 15, 55), Enum.Material.Rock, w3).Orientation = Vector3.new(0, 0, 0)
+	for i = 1, 4 do
+		cyl("ForbiddenAura", 50 + i * 6, 1.5, Vector3.new(sx, plY + i * 6, sz), Color3.fromRGB(20, 0, 40), Enum.Material.Neon, w3).Orientation = Vector3.new(0, 0, 0)
+	end
+	for i = 0, 3 do
+		local a = i / 4 * math.pi * 2
+		cyl("MeritColumn", 3, 200, Vector3.new(sx + math.cos(a) * 30, plY + 100, sz + math.sin(a) * 30), Color3.fromRGB(255, 220, 60), Enum.Material.Neon, w3).Orientation = Vector3.new(0, 0, 0)
+	end
+	local book = part("BookOfMisfortuneShrine", Vector3.new(20, 25, 2), Vector3.new(sx, plY + 20, sz), Color3.fromRGB(255, 200, 60), Enum.Material.Neon, w3)
+	book.CanCollide = false
+	CollectionService:AddTag(book, "BookOfMisfortune")
+	billboard(w3, Vector3.new(sx, plY + 36, sz), "📖 Book of Misfortune", Color3.fromRGB(255, 200, 60), "Daily Curse", Color3.fromRGB(255, 240, 200))
+	cyl("HanJueSageThrone", 10, 4, Vector3.new(sx, plY + 5, sz - 30), Color3.fromRGB(80, 50, 110), Enum.Material.Marble, w3).Orientation = Vector3.new(0, 0, 0)
+	billboard(w3, Vector3.new(sx, plY + 14, sz - 30), "☯️ Han Jue [Sage]", Color3.fromRGB(255, 210, 120))
+end
 
--- Arrival pad & portals
-cyl("W3ArrivalPad", 60, 6, Vector3.new(-200, W3Y+3, 0),
-	Color3.fromRGB(180,140,255), Enum.Material.SmoothPlastic, w3)
-portalArch(w3, Vector3.new(-200, W3Y, 0),
-	Color3.fromRGB(80,200,255), "↓ IMMORTAL SKY  (R10-16)")
-portalArch(w3, Vector3.new(200, W3Y, 0),
-	Color3.fromRGB(255,50,50), "↑ PRIMAL CHAOS  (R24+)")
-
-billboard3d(w3, Vector3.new(0, W3Y+380, 0),
-	"⋆  SAGE HEAVEN", Color3.fromRGB(200,100,255),
-	"Realm 17 — Realm 23", Color3.fromRGB(255,255,255))
+cyl("W3ArrivalPad", 40, 6, Vector3.new(WorldData.WORLD_ARRIVAL[3].X, Y3 + 9, WorldData.WORLD_ARRIVAL[3].Z), Color3.fromRGB(120, 80, 160), Enum.Material.Marble, w3)
+portalArch(w3, "Portal_W3_to_W2", Vector3.new(-260, Y3 + 6, 0), Color3.fromRGB(120, 200, 120), "↓ Immortal Sky")
+portalArch(w3, "Portal_W3_to_W4", Vector3.new(260, Y3 + 6, 0), Color3.fromRGB(255, 60, 60), "↑ Primal Chaos (R23)")
+billboard(w3, Vector3.new(0, Y3 + 200, 0), "⋆ SAGE HEAVEN", Color3.fromRGB(200, 100, 255), "Realm 17 — 23", Color3.fromRGB(255, 255, 255))
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- WORLD 4 — PRIMAL CHAOS  (Y = 5400)
 -- ══════════════════════════════════════════════════════════════════════════════
 local w4 = Instance.new("Folder"); w4.Name = "World4_PrimalChaos"; w4.Parent = world
-local W4Y = Y4
 
--- Black basalt ground
-cyl("ChaosFloor", 800, 10, Vector3.new(0, W4Y+5, 0),
-	Color3.fromRGB(12, 8, 20), Enum.Material.Basalt, w4)
+cyl("ChaosFloor", 1000, 10, Vector3.new(0, Y4 + 5, 0), Color3.fromRGB(8, 4, 16), Enum.Material.Basalt, w4)
 
--- Neon veins across the floor
 local veinCols = {
-	Color3.fromRGB(255,30,30), Color3.fromRGB(255,120,0), Color3.fromRGB(180,0,255),
-	Color3.fromRGB(0,200,255), Color3.fromRGB(255,220,0),
+	Color3.fromRGB(255, 30, 30), Color3.fromRGB(255, 120, 0), Color3.fromRGB(180, 0, 255),
+	Color3.fromRGB(0, 200, 255), Color3.fromRGB(255, 220, 0),
 }
-for i = 1, 20 do
-	local a  = i / 20 * math.pi * 2
-	local r1 = 50 + math.random() * 300
-	local r2 = r1 + 40 + math.random() * 120
-	local mid3 = (r1 + r2) / 2
-	local len3 = r2 - r1
-	local col3 = veinCols[((i-1) % #veinCols) + 1]
-	local vein = part("Vein" .. i, Vector3.new(3, 4, len3),
-		Vector3.new(math.cos(a)*mid3, W4Y+10, math.sin(a)*mid3), col3, Enum.Material.Neon, w4)
-	vein.CFrame = CFrame.lookAt(
-		Vector3.new(math.cos(a)*mid3, W4Y+10, math.sin(a)*mid3),
-		Vector3.new(0, W4Y+10, 0)
-	)
-	vein.Size = Vector3.new(3, 4, len3)
+for i = 1, 30 do
+	local a = (i / 30) * math.pi * 2
+	local r1 = rng:NextNumber(40, 280)
+	local len = rng:NextNumber(40, 160)
+	local mid = r1 + len / 2
+	local v = part("ChaosVein", Vector3.new(3, 4, len), Vector3.new(math.cos(a) * mid, Y4 + 10, math.sin(a) * mid), veinCols[((i - 1) % #veinCols) + 1], Enum.Material.Neon, w4)
+	v.CFrame = CFrame.lookAt(v.Position, Vector3.new(0, Y4 + 10, 0)); v.Size = Vector3.new(3, 4, len); v.CanCollide = false
 end
-
--- Chaos monolith towers
 for i = 1, 8 do
-	local a   = i / 8 * math.pi * 2
-	local px  = math.cos(a) * 300
-	local pz  = math.sin(a) * 300
-	local h   = 80 + (i % 3) * 40
-	part("Monolith" .. i, Vector3.new(14, h, 14), Vector3.new(px, W4Y+h/2+10, pz),
-		Color3.fromRGB(8,4,16), Enum.Material.Basalt, w4)
-	ball("MonolithTop" .. i, 18, Vector3.new(px, W4Y+h+19, pz),
-		veinCols[((i-1) % #veinCols)+1], Enum.Material.Neon, w4)
+	local a = i / 8 * math.pi * 2
+	local h = rng:NextNumber(80, 160)
+	part("Monolith", Vector3.new(14, h, 14), Vector3.new(math.cos(a) * 320, Y4 + h / 2 + 10, math.sin(a) * 320), Color3.fromRGB(6, 3, 12), Enum.Material.Basalt, w4)
+	ball("MonolithCrown", 16, Vector3.new(math.cos(a) * 320, Y4 + h + 18, math.sin(a) * 320), veinCols[((i - 1) % #veinCols) + 1], Enum.Material.Neon, w4)
+end
+for i = 1, 60 do
+	local a = (i / 60) * math.pi * 2
+	local col = Color3.fromHSV((i / 60) % 1, 0.9, 1)
+	local d = part("DaoSkyBeam", Vector3.new(1, 1, rng:NextNumber(200, 500)), Vector3.new(math.cos(a) * 200, Y4 + 100 + rng:NextNumber(0, 200), math.sin(a) * 200), col, Enum.Material.Neon, w4)
+	d.CFrame = CFrame.lookAt(d.Position, Vector3.new(0, Y4 + 100, 0)); d.CanCollide = false
 end
 
--- Craters
-for i = 1, 5 do
-	local a   = i / 5 * math.pi * 2
-	local cx  = math.cos(a) * 180
-	local cz  = math.sin(a) * 180
-	cyl("Crater" .. i, 80, 6, Vector3.new(cx, W4Y+7, cz),
-		Color3.fromRGB(6,4,12), Enum.Material.Basalt, w4)
-	cyl("CraterGlow" .. i, 82, 3, Vector3.new(cx, W4Y+10, cz),
-		veinCols[i], Enum.Material.Neon, w4)
+do
+	local av4 = WorldData.WORLD_ARRIVAL[4]
+	cyl("BattlefieldPad", 50, 4, Vector3.new(av4.X, Y4 + 11, av4.Z), Color3.fromRGB(20, 10, 30), Enum.Material.Basalt, w4)
+	for _ = 1, 6 do
+		local a, r = rng:NextNumber(0, math.pi * 2), rng:NextNumber(60, 200)
+		cyl("Crater", rng:NextNumber(20, 50), 4, Vector3.new(math.cos(a) * r, Y4 + 9, math.sin(a) * r), Color3.fromRGB(4, 2, 8), Enum.Material.Basalt, w4).Orientation = Vector3.new(0, 0, 0)
+	end
+	ball("PanguDaoWorld", 200, Vector3.new(400, Y4 + 200, 0), Color3.fromRGB(60, 40, 100), Enum.Material.ForceField, w4).Transparency = 0.3
+	for i = 1, 8 do
+		local a = (i - 1) / 8 * math.pi * 2
+		part("EmperorThrone", Vector3.new(8, 12, 8), Vector3.new(math.cos(a) * 90, Y4 + 16, math.sin(a) * 90), Color3.fromRGB(30, 15, 45), Enum.Material.Rock, w4)
+	end
+	billboard(w4, Vector3.new(av4.X, Y4 + 40, av4.Z), "💥 Chaos Battlefield", Color3.fromRGB(255, 80, 100), "R24 · Dao Creator", Color3.fromRGB(255, 200, 200))
+	local fzpos = Vector3.new(-450, Y4 + 10, 0)
+	cyl("ForbiddenFloor", 300, 4, fzpos, Color3.fromRGB(2, 1, 4), Enum.Material.Basalt, w4).Orientation = Vector3.new(0, 0, 0)
+	for _ = 1, 8 do
+		local f = part("DarkFog", Vector3.new(rng:NextNumber(40, 80), 30, rng:NextNumber(40, 80)), fzpos + Vector3.new(rng:NextNumber(-120, 120), 20, rng:NextNumber(-120, 120)), Color3.fromRGB(0, 0, 0), Enum.Material.Slate, w4)
+		f.Transparency = 0.4; f.CanCollide = false
+	end
+	local fz = part("ChaoticForbiddenZone", Vector3.new(20, 18, 4), fzpos + Vector3.new(150, 9, 0), Color3.fromRGB(60, 0, 0), Enum.Material.ForceField, w4)
+	fz.Transparency = 0.5; fz.CanCollide = false
+	CollectionService:AddTag(fz, "ChaoticForbiddenZone")
+	signBoard(w4, fzpos + Vector3.new(150, 24, 0), Vector3.new(20, 4, 0.5), "⚠️ Chaotic Forbidden Zone — 10min", Color3.fromRGB(255, 60, 60), Color3.fromRGB(20, 0, 0))
 end
 
--- Origin Realm — the primordial sphere at the centre
-ball("OriginCore",  120, Vector3.new(0, W4Y+200, 0),
-	Color3.fromRGB(40, 0, 80), Enum.Material.Neon, w4)
-ball("OriginShell", 140, Vector3.new(0, W4Y+200, 0),
-	Color3.fromRGB(180,0,255), Enum.Material.ForceField, w4)
-for i = 1, 6 do
-	local a  = i / 6 * math.pi * 2
-	local ox = math.cos(a) * 160
-	local oz = math.sin(a) * 160
-	ball("OriginSat" .. i, 30, Vector3.new(ox, W4Y+200, oz),
-		veinCols[((i-1) % #veinCols)+1], Enum.Material.Neon, w4)
+do
+	for _ = 1, 16 do
+		local f = ball("VoidEnergy", rng:NextNumber(10, 30), Vector3.new(rng:NextNumber(-300, 300), Y4 + rng:NextNumber(60, 220), rng:NextNumber(-300, 300)), Color3.fromRGB(120, 80, 200), Enum.Material.ForceField, w4)
+		f.Transparency = 0.7
+	end
+	for i = 1, 3 do
+		local fx = -200 + i * 200
+		part("Fiendcelestial", Vector3.new(10, 100, 10), Vector3.new(fx, Y4 + 150, -300), Color3.fromRGB(20, 10, 30), Enum.Material.Slate, w4)
+		ball("FiendEye", 6, Vector3.new(fx, Y4 + 200, -296), Color3.fromRGB(180, 0, 255), Enum.Material.Neon, w4)
+	end
+	billboard(w4, Vector3.new(0, Y4 + 260, -300), "🌑 Primordial Fiendcelestials", Color3.fromRGB(200, 80, 255), "R25 · Creator Lord", Color3.fromRGB(230, 190, 255))
+	local bw = part("BlankRealmHorizon", Vector3.new(3000, 1000, 2), Vector3.new(0, Y4 + 200, 700), Color3.fromRGB(255, 255, 255), Enum.Material.Neon, w4)
+	bw.Transparency = 0.4; bw.CanCollide = false
+	local edge = part("BlankRealmEdge", Vector3.new(400, 40, 30), Vector3.new(0, Y4 + 30, 600), Color3.fromRGB(240, 240, 255), Enum.Material.ForceField, w4)
+	edge.Transparency = 0.85; edge.CanCollide = false
+	CollectionService:AddTag(edge, "BlankRealmEdge")
+	billboard(w4, Vector3.new(0, Y4 + 70, 600), "∞ Blank Realm Edge", Color3.fromRGB(220, 220, 255), "Stand 1h → +1% all stats", Color3.fromRGB(240, 240, 255))
+	cyl("HanHuangIsle", 30, 6, Vector3.new(-300, Y4 + 60, 200), Color3.fromRGB(40, 20, 50), Enum.Material.Rock, w4).Orientation = Vector3.new(0, 0, 0)
+	billboard(w4, Vector3.new(-300, Y4 + 72, 200), "🔥 Han Huang", Color3.fromRGB(255, 90, 120), "Daily Quests", Color3.fromRGB(255, 200, 200))
 end
 
--- Arrival pad & portal back down
-cyl("W4ArrivalPad", 60, 6, Vector3.new(-180, W4Y+3, 0),
-	Color3.fromRGB(60,0,80), Enum.Material.SmoothPlastic, w4)
-portalArch(w4, Vector3.new(-180, W4Y, 0),
-	Color3.fromRGB(200,100,255), "↓ SAGE HEAVEN  (R17-23)")
+do
+	local oy = 5700
+	cyl("OriginIsle", 200, 12, Vector3.new(0, oy, 600), Color3.fromRGB(240, 230, 200), Enum.Material.SmoothPlastic, w4)
+	part("HanJueCaveAbode", Vector3.new(30, 20, 30), Vector3.new(0, oy + 16, 600), Color3.fromRGB(60, 50, 40), Enum.Material.Rock, w4)
+	local holo = part("SystemInterface", Vector3.new(20, 12, 0.5), Vector3.new(0, oy + 16, 612), Color3.fromRGB(10, 20, 40), Enum.Material.Neon, w4)
+	holo.CanCollide = false
+	local sg = Instance.new("SurfaceGui"); sg.Face = Enum.NormalId.Front; sg.Adornee = holo; sg.Parent = holo
+	local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.fromScale(1, 1); lbl.BackgroundTransparency = 1
+	lbl.Text = "◈ SYSTEM ◈\nRealm: 26 / Ultimate Origin\nLifespan: ∞\nStatus: Supreme"
+	lbl.TextColor3 = Color3.fromRGB(120, 220, 255); lbl.TextScaled = true; lbl.Font = Enum.Font.Code; lbl.Parent = sg
+	part("NinthChaos", Vector3.new(8, 24, 8), Vector3.new(40, oy + 18, 600), Color3.fromRGB(20, 10, 30), Enum.Material.Slate, w4)
+	billboard(w4, Vector3.new(40, oy + 34, 600), "🌀 Ninth Chaos", Color3.fromRGB(160, 100, 220))
+	ball("OriginBook", 14, Vector3.new(0, oy + 40, 600), Color3.fromRGB(255, 210, 60), Enum.Material.Neon, w4)
+	billboard(w4, Vector3.new(0, oy + 52, 600), "👑 Ultimate Origin Realm", Color3.fromRGB(255, 220, 120), "R26 — Immortalized", Color3.fromRGB(255, 245, 210))
+end
 
-billboard3d(w4, Vector3.new(0, W4Y+360, 0),
-	"✧  PRIMAL CHAOS", Color3.fromRGB(255,40,120),
-	"Realm 24 — Realm 26+", Color3.fromRGB(255,200,200))
-
--- ══════════════════════════════════════════════════════════════════════════════
--- HAN JUE'S SECRET SHRINE  (hidden corner of World 1)
--- ══════════════════════════════════════════════════════════════════════════════
-local shrine = Instance.new("Folder"); shrine.Name = "SecretShrine"; shrine.Parent = w1
-local sx, sz = -320, -320
-cyl("ShrinePad",   30, 3, Vector3.new(sx, Y1+1.5, sz),
-	Color3.fromRGB(20,20,40), Enum.Material.SmoothPlastic, shrine)
-ball("ShrineOrb",  16, Vector3.new(sx, Y1+14,   sz),
-	Color3.fromRGB(255,220,80), Enum.Material.Neon, shrine)
-part("ShrinePillarF", Vector3.new(3,16,3), Vector3.new(sx-8, Y1+8, sz-8),
-	Color3.fromRGB(80,60,120), Enum.Material.SmoothPlastic, shrine)
-part("ShrinePillarB", Vector3.new(3,16,3), Vector3.new(sx+8, Y1+8, sz+8),
-	Color3.fromRGB(80,60,120), Enum.Material.SmoothPlastic, shrine)
-billboard3d(shrine, Vector3.new(sx, Y1+28, sz),
-	"🌟  Han Jue's Shrine", Color3.fromRGB(255,220,80),
-	"The Solitary Immortal", Color3.fromRGB(200,180,255))
+portalArch(w4, "Portal_W4_to_W3", Vector3.new(WorldData.WORLD_ARRIVAL[4].X, Y4 + 11, WorldData.WORLD_ARRIVAL[4].Z + 40), Color3.fromRGB(180, 100, 255), "↓ Sage Heaven")
+billboard(w4, Vector3.new(0, Y4 + 360, 0), "✧ PRIMAL CHAOS", Color3.fromRGB(255, 40, 120), "Realm 24 — 26", Color3.fromRGB(255, 200, 200))
 
 -- ══════════════════════════════════════════════════════════════════════════════
-print(string.format(
-	"[TTP] World generated — W1 Mortal (Y=%d), W2 Immortal (Y=%d), W3 Sage (Y=%d), W4 Chaos (Y=%d)",
-	Y1, Y2, Y3, Y4
-))
+print(string.format("[TTP] World generated — W1 (Y=%d), W2 (Y=%d), W3 (Y=%d), W4 (Y=%d)", Y1, Y2, Y3, Y4))

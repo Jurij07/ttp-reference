@@ -117,8 +117,6 @@ local function wire(part: Instance, handler: (BasePart, Player) -> ())
 end
 
 function WorldTransitionService.Start()
-	worldAscension; firstAscension; serverAnnounce
-
 	task.spawn(function()
 		workspace:WaitForChild("World", 30)
 

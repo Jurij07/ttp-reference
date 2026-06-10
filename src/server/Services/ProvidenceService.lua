@@ -54,11 +54,36 @@ function ProvidenceService.GetMultipliers(player: Player): { hp: number, dmg: nu
 	local statBonus    = connate   and connate.statBonus    or 1.0
 	local lifespanMult = connate   and connate.lifespanMult or 1.0
 
+	-- Physique-Evolution (skaliert mit Realm + Total-EXP)
+	local PhysiqueEvolutionData = require(GameData:WaitForChild("PhysiqueEvolutionData"))
+	local evo = PhysiqueEvolutionData.ResolveStage(
+		prov and prov.physique,
+		profile and profile.realm or 1,
+		profile and profile.totalExpEarned or 0
+	)
+	local eHp  = evo.statMult * evo.hpMult
+	local eDmg = evo.statMult * evo.dmgMult
+	local eDef = evo.statMult * evo.defMult
+	local eExp = evo.statMult * evo.expMult
+
+	-- Sekten-Buffs (falls beigetreten)
+	local sHp, sDmg, sDef, sExp = 1.0, 1.0, 1.0, 1.0
+	if profile and profile.sectId then
+		local SectData = require(GameData:WaitForChild("SectData"))
+		local sect = SectData.Get(profile.sectId)
+		if sect then
+			local buff = SectData.BuffAtLevel(sect, profile.sectLevel or 0)
+			if buff then
+				sHp, sDmg, sDef, sExp = buff.hpMult, buff.dmgMult, buff.defMult, buff.expMult
+			end
+		end
+	end
+
 	return {
-		hp  = (physique and physique.hpMult  or 1.0) * statBonus * (daoEntry and daoEntry.hpMult  or 1.0),
-		dmg = (physique and physique.dmgMult or 1.0) * statBonus * (daoEntry and daoEntry.dmgMult or 1.0),
-		def = (physique and physique.defMult or 1.0) * statBonus * (daoEntry and daoEntry.defMult or 1.0),
-		exp = (physique and physique.expMult or 1.0) * (grade and grade.mult or 1.0) * (daoEntry and daoEntry.expMult or 1.0),
+		hp  = (physique and physique.hpMult  or 1.0) * statBonus * (daoEntry and daoEntry.hpMult  or 1.0) * eHp  * sHp,
+		dmg = (physique and physique.dmgMult or 1.0) * statBonus * (daoEntry and daoEntry.dmgMult or 1.0) * eDmg * sDmg,
+		def = (physique and physique.defMult or 1.0) * statBonus * (daoEntry and daoEntry.defMult or 1.0) * eDef * sDef,
+		exp = (physique and physique.expMult or 1.0) * (grade and grade.mult or 1.0) * (daoEntry and daoEntry.expMult or 1.0) * eExp * sExp,
 		lifespan = lifespanMult,
 	}
 end

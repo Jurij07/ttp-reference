@@ -178,6 +178,11 @@ local mainMenuLayer  = mkOverlay("MainMenuLayer")
 local inventoryLayer = mkOverlay("InventoryLayer")
 local shopLayer      = mkOverlay("ShopLayer")
 local questLayer     = mkOverlay("QuestLayer")
+local sectLayer      = mkOverlay("SectLayer")
+local SectData       = require(GameData:WaitForChild("SectData"))
+
+-- Vorwärts-Deklaration (Definition weiter unten bei den Button-Bindungen).
+local closeAllOverlays: () -> ()
 
 -- ════════════════════════════════════════════════════════════
 -- ── HUD ──────────────────────────────────────────────────────
@@ -221,6 +226,7 @@ local seclTimer  = mkLabel(seclPanel,"",UDim2.new(1,-16,0,16),UDim2.new(0,8,0,68
 local invBtn      = mkButton(hudRoot,"🎒",UDim2.new(0,46,0,46),UDim2.new(1,-14,1,-14),  C.bg4,Vector2.new(1,1))
 local shopBtn     = mkButton(hudRoot,"🏪",UDim2.new(0,46,0,46),UDim2.new(1,-66,1,-14),  C.bg4,Vector2.new(1,1))
 local questBtn    = mkButton(hudRoot,"📜",UDim2.new(0,46,0,46),UDim2.new(1,-118,1,-14), C.bg4,Vector2.new(1,1))
+local sectBtn     = mkButton(hudRoot,"🏯",UDim2.new(0,46,0,46),UDim2.new(1,-170,1,-14), C.bg4,Vector2.new(1,1))
 local mainMenuBtn = mkButton(hudRoot,"≡", UDim2.new(0,38,0,38),UDim2.new(1,-14,0,14),   C.bg4,Vector2.new(1,0))
 
 local seclAbortBtn = mkButton(hudRoot,"⚠️ Klausur abbrechen (−30%)",
@@ -434,6 +440,127 @@ Net.Event("QuestSync").OnClientEvent:Connect(function(syncData: any)
 end)
 
 -- ════════════════════════════════════════════════════════════
+-- ── Sect overlay
+-- ════════════════════════════════════════════════════════════
+local sectCard = mkPanel("SectCard",UDim2.new(0,580,0,520),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), sectLayer)
+mkLabel(sectCard,"🏯  HIDDEN SECTS",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
+local closeSect = mkButton(sectCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
+local sectStatusL = mkLabel(sectCard,"Keine Sekte beigetreten",UDim2.new(1,-30,0,18),UDim2.fromOffset(15,40),C.t2,12)
+
+local sectList, _ = mkScrollList(sectCard, UDim2.new(1,-20,1,-72), UDim2.fromOffset(10,64))
+
+local joinSectRemote = Net.Event("JoinSect")
+local currentSectId: string? = nil
+local currentSectLevel = 0
+
+local function rebuildSects()
+	for _, c in ipairs(sectList:GetChildren()) do
+		if c:IsA("Frame") then c:Destroy() end
+	end
+	local playerRealm = (player:GetAttribute("Realm") or 1) :: number
+	local order = 0
+	for _, sect in ipairs(SectData.SECTS) do
+		order += 1
+		local joined = currentSectId == sect.id
+		local row = Instance.new("Frame"); row.LayoutOrder = order
+		row.Size = UDim2.new(1,0,0,118); row.BorderSizePixel = 0
+		row.BackgroundColor3 = joined and Color3.fromHex("121E2E") or C.bg3
+		corner(row,6); stroke(row, joined and C.gold or C.border)
+		row.Parent = sectList
+
+		mkLabel(row, sect.icon .. "  " .. sect.name, UDim2.new(0.7,0,0,20), UDim2.fromOffset(10,8), C.t1, 14, Enum.Font.GothamBold)
+		mkLabel(row, sect.desc, UDim2.new(1,-20,0,28), UDim2.fromOffset(10,30), C.t3, 11)
+		mkLabel(row, ("Realm %d erforderlich · Max Level %d"):format(sect.reqRealm, sect.maxLevel),
+			UDim2.new(1,-20,0,14), UDim2.fromOffset(10,60), C.t2, 10)
+
+		-- Milestone preview
+		local msParts = {}
+		for _, m in ipairs(sect.milestones) do
+			table.insert(msParts, ("L%d: %s"):format(m.level, m.name))
+		end
+		mkLabel(row, table.concat(msParts, "  ·  "), UDim2.new(1,-20,0,14), UDim2.fromOffset(10,76), C.a1, 9)
+
+		if joined then
+			mkLabel(row, ("✓ Beigetreten — Level %d"):format(currentSectLevel),
+				UDim2.new(0,200,0,28), UDim2.new(0,10,0,90), C.gold, 12, Enum.Font.GothamBold)
+		elseif playerRealm >= sect.reqRealm then
+			local joinBtn = mkButton(row,"Beitreten",UDim2.new(0,110,0,30),UDim2.new(1,-120,0,82),C.a1)
+			joinBtn.TextSize = 12
+			local thisId = sect.id
+			joinBtn.MouseButton1Click:Connect(function() joinSectRemote:FireServer(thisId) end)
+		else
+			mkLabel(row, ("🔒 Realm %d nötig"):format(sect.reqRealm),
+				UDim2.new(0,140,0,28), UDim2.new(1,-150,0,90), C.t3, 11, nil, Enum.TextXAlignment.Center)
+		end
+	end
+end
+
+Net.Event("SectSync").OnClientEvent:Connect(function(data: any)
+	currentSectId = data.sectId
+	currentSectLevel = data.level or 0
+	if data.sectName then
+		sectStatusL.Text = ("Sekte: %s · Level %d · %s (EXP %d/%d)"):format(
+			data.sectName, data.level or 0, data.buffName or "—",
+			math.floor(data.exp or 0), math.floor(data.expNeeded or 0))
+		sectStatusL.TextColor3 = C.gold
+	else
+		sectStatusL.Text = "Keine Sekte beigetreten"
+		sectStatusL.TextColor3 = C.t2
+	end
+	if sectLayer.Visible then rebuildSects() end
+end)
+
+-- ════════════════════════════════════════════════════════════
+-- ── Heaven Tribulation overlay
+-- ════════════════════════════════════════════════════════════
+local tribLayer = Instance.new("Frame"); tribLayer.Name = "TribulationLayer"
+tribLayer.Size = UDim2.fromScale(1,1); tribLayer.BackgroundColor3 = Color3.fromHex("0A0612")
+tribLayer.BackgroundTransparency = 0.35; tribLayer.Visible = false
+tribLayer.ZIndex = 40; tribLayer.Parent = gui
+
+local tribTitle = mkLabel(tribLayer,"⚡ HEAVEN TRIBULATION",UDim2.new(1,0,0,40),UDim2.fromScale(0,0.28),
+	Color3.fromHex("C4B5FD"),30,Enum.Font.GothamBlack,Enum.TextXAlignment.Center)
+tribTitle.ZIndex = 41
+local tribName = mkLabel(tribLayer,"",UDim2.new(1,0,0,26),UDim2.fromScale(0,0.36),
+	C.gold,18,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+tribName.ZIndex = 41
+local tribWaveL = mkLabel(tribLayer,"",UDim2.new(1,0,0,24),UDim2.fromScale(0,0.45),
+	C.t1,16,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+tribWaveL.ZIndex = 41
+local tribHint = mkLabel(tribLayer,"Überlebe alle Wellen! Nutze Heil-Pillen [I] zum Heilen.",
+	UDim2.new(1,0,0,20),UDim2.fromScale(0,0.52),C.t2,13,nil,Enum.TextXAlignment.Center)
+tribHint.ZIndex = 41
+
+local function flashLightning()
+	local flash = Instance.new("Frame")
+	flash.Size = UDim2.fromScale(1,1); flash.BackgroundColor3 = Color3.fromHex("E9D5FF")
+	flash.BackgroundTransparency = 0.3; flash.ZIndex = 45; flash.Parent = tribLayer
+	local tw = TweenService:Create(flash, TweenInfo.new(0.35), { BackgroundTransparency = 1 })
+	tw:Play(); tw.Completed:Connect(function() flash:Destroy() end)
+end
+
+Net.Event("TribulationStarted").OnClientEvent:Connect(function(name: string, waves: number)
+	tribLayer.Visible = true
+	tribName.Text = name
+	tribWaveL.Text = ("Welle 0 / %d"):format(waves)
+	closeAllOverlays()
+end)
+
+Net.Event("TribulationWave").OnClientEvent:Connect(function(wave: number, waves: number, dmg: number)
+	tribWaveL.Text = ("Welle %d / %d   (−%s HP)"):format(wave, waves, fmt(dmg))
+	flashLightning()
+end)
+
+Net.Event("TribulationEnded").OnClientEvent:Connect(function(success: boolean)
+	tribLayer.Visible = false
+	if success then
+		showToast("✨ Tribulation überstanden — Durchbruch!", "gold")
+	else
+		showToast("💀 Tribulation gescheitert! Heile dich und brich erneut durch.", "warn")
+	end
+end)
+
+-- ════════════════════════════════════════════════════════════
 -- ── Providence start menu
 -- ════════════════════════════════════════════════════════════
 local mContainer = Instance.new("Frame")
@@ -598,10 +725,15 @@ bindAttr("Aptitude", function(v)
 	local g = v and AptitudeData.GetByName(v)
 	hAptL.Text = "🌟 " .. (v or "—"); hAptL.TextColor3 = (g and RARITY[g.rarity]) or C.t1
 end)
-bindAttr("Physique", function(v)
+local function updatePhysiqueLabel()
+	local v = player:GetAttribute("Physique")
 	local p = v and ProvidenceData.GetPhysique(v)
-	hPhysL.Text = "💪 " .. (v or "—"); hPhysL.TextColor3 = p and Color3.fromHex(p.color) or C.t1
-end)
+	local stage = player:GetAttribute("PhysiqueStage") or 1
+	hPhysL.Text = ("💪 %s (Stufe %d)"):format(v or "—", stage)
+	hPhysL.TextColor3 = p and Color3.fromHex(p.color) or C.t1
+end
+bindAttr("Physique", updatePhysiqueLabel)
+bindAttr("PhysiqueStage", updatePhysiqueLabel)
 bindAttr("Connate", function(v)
 	hConnL.Text = "🎭 " .. (v or "—"); hConnL.TextColor3 = (v and RARITY[v]) or C.t1
 end)
@@ -768,9 +900,10 @@ end)
 -- ════════════════════════════════════════════════════════════
 -- ── Button wiring
 -- ════════════════════════════════════════════════════════════
-local function closeAllOverlays()
+function closeAllOverlays()
 	mainMenuLayer.Visible = false; inventoryLayer.Visible = false
 	shopLayer.Visible = false;     questLayer.Visible = false
+	sectLayer.Visible = false
 end
 
 mainMenuBtn.MouseButton1Click:Connect(function() closeAllOverlays(); mainMenuLayer.Visible = true end)
@@ -788,6 +921,13 @@ questBtn.MouseButton1Click:Connect(function()
 	rebuildQuests()
 end)
 closeQuest.MouseButton1Click:Connect(function() questLayer.Visible = false end)
+
+sectBtn.MouseButton1Click:Connect(function()
+	closeAllOverlays()
+	sectLayer.Visible = true
+	rebuildSects()
+end)
+closeSect.MouseButton1Click:Connect(function() sectLayer.Visible = false end)
 
 mmButtons[1].MouseButton1Click:Connect(function()
 	mainMenuLayer.Visible = false
@@ -813,7 +953,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	local key = input.KeyCode
 	if key == Enum.KeyCode.Escape then
-		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible then
+		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible or sectLayer.Visible then
 			closeAllOverlays()
 		elseif seclPopup.Visible then
 			seclPopup.Visible = false
@@ -823,7 +963,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
 			local vis = not inventoryLayer.Visible; closeAllOverlays(); inventoryLayer.Visible = vis
 		end
 	elseif key == Enum.KeyCode.Q then
-		if not player:GetAttribute("InMenu") and not player:GetAttribute("InSeclusion") then
+		if not player:GetAttribute("InMenu") and not player:GetAttribute("InSeclusion")
+			and not player:GetAttribute("InTribulation") then
 			useTechRemote:FireServer()
 		end
 	end

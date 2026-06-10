@@ -9,6 +9,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Config = require(ReplicatedStorage:WaitForChild("Config"))
 local GameData = ReplicatedStorage:WaitForChild("GameData")
 local CultivationData = require(GameData:WaitForChild("CultivationData"))
+local TribulationData = require(GameData:WaitForChild("TribulationData"))
+local PhysiqueEvolutionData = require(GameData:WaitForChild("PhysiqueEvolutionData"))
 local Net = require(ReplicatedStorage:WaitForChild("Net"))
 local Buffs = require(ReplicatedStorage:WaitForChild("Buffs"))
 
@@ -24,9 +26,10 @@ local function updateMovement(player: Player)
 	local char = player.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid") :: Humanoid?
 	if not hum then return end
-	local inMenu      = player:GetAttribute("InMenu")      == true
-	local inSeclusion = player:GetAttribute("InSeclusion") == true
-	local frozen = inMenu or inSeclusion
+	local inMenu        = player:GetAttribute("InMenu")        == true
+	local inSeclusion   = player:GetAttribute("InSeclusion")   == true
+	local inTribulation = player:GetAttribute("InTribulation") == true
+	local frozen = inMenu or inSeclusion or inTribulation
 	hum.WalkSpeed  = frozen and 0  or 16
 	hum.JumpPower  = frozen and 0  or 50
 	hum.JumpHeight = frozen and 0  or 7.2
@@ -46,7 +49,26 @@ local function updateProgressAttributes(player: Player, profile: any)
 	player:SetAttribute("Karma",       profile.karma)
 	player:SetAttribute("TotalKills",  profile.totalKills)
 	player:SetAttribute("Age",         math.floor(profile.age))
+	player:SetAttribute("TotalExp",    math.floor(profile.totalExpEarned or 0))
+	player:SetAttribute("PhysiqueStage", profile.physiqueStage or 1)
 end
+
+-- Prüft, ob der Spieler eine neue Physique-Evolutions-Stufe erreicht hat.
+-- Gibt true zurück, wenn eine Stufe aufstieg (für Benachrichtigung).
+local function checkPhysiqueEvolution(player: Player, profile: any): boolean
+	local prov = profile.providence
+	local evo = PhysiqueEvolutionData.ResolveStage(
+		prov and prov.physique, profile.realm, profile.totalExpEarned or 0)
+	if evo.stage > (profile.physiqueStage or 1) then
+		profile.physiqueStage = evo.stage
+		profile.bonusLifespan = (profile.bonusLifespan or 0) + evo.bonusLifespan
+		notifyEvent:FireClient(player,
+			("💪 Physique-Evolution! Stufe %d: %s"):format(evo.stage, evo.label), "gold")
+		return true
+	end
+	return false
+end
+CultivationService.CheckPhysiqueEvolution = checkPhysiqueEvolution
 
 function CultivationService.RecomputeStats(player: Player)
 	local profile = DataManager.Get(player)
@@ -88,6 +110,7 @@ local function setupCharacter(player: Player)
 	end)
 	player:GetAttributeChangedSignal("InSeclusion"):Connect(function() updateMovement(player) end)
 	player:GetAttributeChangedSignal("InMenu"):Connect(function() updateMovement(player) end)
+	player:GetAttributeChangedSignal("InTribulation"):Connect(function() updateMovement(player) end)
 	if player.Character then updateMovement(player) end
 end
 
@@ -109,17 +132,51 @@ local function initPlayer(player: Player)
 	end
 end
 
+-- Führt den eigentlichen Realm-Aufstieg durch (nach bestandener Tribulation).
+function CultivationService.DoRealmUp(player: Player)
+	local profile = DataManager.Get(player)
+	if not profile then return end
+	if profile.realm >= #CultivationData.REALMS then return end
+
+	profile.exp = 0
+	profile.realm += 1
+	profile.stage = 1
+	local realm = CultivationData.GetRealm(profile.realm)
+	notifyEvent:FireClient(player, ("⚡ DURCHBRUCH! %s erreicht!"):format(realm and realm.name or "?"), "gold")
+	checkPhysiqueEvolution(player, profile)
+	CultivationService.RecomputeStats(player)
+	local QuestService = require(script.Parent.QuestService)
+	QuestService.Refresh(player)
+end
+
 -- isRaw=true skips Providence + Buff multipliers (for quest/item rewards)
 function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: boolean?)
 	local profile = DataManager.Get(player)
 	if not profile then return end
 
+	-- Während einer Tribulation friert die EXP-Gewinnung ein.
+	if player:GetAttribute("InTribulation") then
+		updateProgressAttributes(player, profile)
+		return
+	end
+
+	local gained: number
 	if isRaw then
-		profile.exp += baseAmount
+		gained = baseAmount
 	else
 		local m = ProvidenceService.GetMultipliers(player)
 		local buffMult = Buffs.GetMult(player, "Exp")
-		profile.exp += baseAmount * m.exp * buffMult
+		gained = baseAmount * m.exp * buffMult
+	end
+	profile.exp += gained
+	if gained > 0 then
+		profile.totalExpEarned = (profile.totalExpEarned or 0) + gained
+		checkPhysiqueEvolution(player, profile)
+		-- Sekten-EXP: 5% der gewonnenen EXP fließt in die Sekte.
+		if profile.sectId then
+			local SectService = require(script.Parent.SectService)
+			SectService.AddSectExp(player, gained * 0.05)
+		end
 	end
 
 	local needed = CultivationData.GetStageEXP(profile.realm, profile.stage)
@@ -138,11 +195,21 @@ function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: bo
 				profile.exp = needed - 1
 				break
 			end
-			profile.exp -= needed
+			-- Heaven Tribulation gate ab R3
+			local trib = TribulationData.GetForRealm(profile.realm)
+			if trib and profile.realm >= 3 then
+				profile.exp = needed - 1
+				local TribulationService = require(script.Parent.TribulationService)
+				TribulationService.Begin(player, profile.realm)
+				break
+			end
+			-- R1→R2, R2→R3: direkter Aufstieg (keine Tribulation)
+			profile.exp = 0
 			profile.realm += 1
 			profile.stage = 1
 			local realm = CultivationData.GetRealm(profile.realm)
 			notifyEvent:FireClient(player, ("⚡ DURCHBRUCH! %s erreicht!"):format(realm and realm.name or "?"), "gold")
+			checkPhysiqueEvolution(player, profile)
 			CultivationService.RecomputeStats(player)
 			local QuestService = require(script.Parent.QuestService)
 			QuestService.Refresh(player)

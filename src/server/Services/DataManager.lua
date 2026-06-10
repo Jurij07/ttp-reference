@@ -19,7 +19,7 @@ local store: DataStore? = nil
 -- ── Standard-Profil ────────────────────────────────────────
 local function defaultProfile(): any
 	return {
-		version = 4,
+		version = 5,
 		providence = nil,
 		providenceConfirmed = false,
 		rerolls = {
@@ -31,6 +31,7 @@ local function defaultProfile(): any
 		realm          = 1,
 		stage          = 1,
 		exp            = 0,
+		totalExpEarned = 0,        -- akkumulierte EXP (für Physique-Evolution)
 		spiritStones   = Config.STARTING_SPIRIT_STONES,
 		karma          = Config.STARTING_KARMA,
 		age            = Config.STARTING_AGE,
@@ -39,6 +40,10 @@ local function defaultProfile(): any
 		bossesKilled   = {},
 		inventory      = {},
 		quests         = {},
+		physiqueStage  = 1,        -- aktuelle Physique-Evolutions-Stufe
+		sectId         = nil,      -- beigetretene Sekte (oder nil)
+		sectLevel      = 0,        -- Sekten-Level
+		sectExp        = 0,        -- Sekten-EXP zum nächsten Level
 	}
 end
 
@@ -62,6 +67,10 @@ local function reconcile(profile: any)
 	end
 	if type(profile.bossesKilled) ~= "table" then profile.bossesKilled = {} end
 	if type(profile.bonusLifespan) ~= "number" then profile.bonusLifespan = 0 end
+	if type(profile.totalExpEarned) ~= "number" then profile.totalExpEarned = 0 end
+	if type(profile.physiqueStage) ~= "number" then profile.physiqueStage = 1 end
+	if type(profile.sectLevel) ~= "number" then profile.sectLevel = 0 end
+	if type(profile.sectExp) ~= "number" then profile.sectExp = 0 end
 end
 
 local function keyFor(userId: number): string

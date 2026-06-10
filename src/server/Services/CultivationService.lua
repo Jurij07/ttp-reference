@@ -155,6 +155,10 @@ function CultivationService.DoRealmUp(player: Player)
 	profile.exp = 0
 	profile.realm += 1
 	profile.stage = 1
+	-- Each breakthrough deepens Dao insight (drives the Dao-mastery titles).
+	if type(profile.daoMastered) == "table" then
+		profile.daoMastered["insight_" .. tostring(profile.realm)] = true
+	end
 	local realm = CultivationData.GetRealm(profile.realm)
 	notifyEvent:FireClient(player, ("⚡ BREAKTHROUGH! Reached %s!"):format(realm and realm.name or "?"), "gold")
 	checkPhysiqueEvolution(player, profile)

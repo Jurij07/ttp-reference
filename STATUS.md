@@ -64,8 +64,9 @@ This compares the main elements of *Top Tier Providence* (novel / manhwa + the
 | Leaderboard & Rank Titles | 6 categories, top-3 bonuses | ✅ Live standings + #1 rank bonuses |
 | PvP | Player-vs-player victories | ✅ Opt-in toggle + [G] duel nearest |
 | Robux monetization | Developer Products + GamePasses | ✅ Store + ProcessReceipt (placeholder IDs) |
-| Status-effect combat hooks | Apply the 14 effects in fights | 🟡 data ready |
-| Per-realm distinct worlds | Unique terrain/theme per realm | 🟡 Teleport between realm zones exists |
+| Status-effect combat hooks | Apply the 14 effects in fights | ✅ DoT/HoT/control wired; Dao debuffs; HUD badges |
+| Per-realm distinct worlds | Unique terrain/theme per realm | ✅ Hub + 9 bounded themed zones, gates, signs, bridges |
+| Monster variety | Recognizable creatures | ✅ 7 archetypes by icon (serpent/dragon/avian/turtle/spirit/humanoid/quadruped) |
 
 ## 6. World & UX
 
@@ -81,13 +82,13 @@ This compares the main elements of *Top Tier Providence* (novel / manhwa + the
 ---
 
 ### Rough completeness
-- **Core loop + Providence + combat content:** ~85%
-- **Heaven/progression systems:** ~75%
-- **Side systems (companions/formations/dungeons/titles/fate/leaderboard/PvP/Robux):** ~80%
-- **Overall vs. full TTP reference:** ~80%
+- **Core loop + Providence + combat content:** ~90%
+- **Heaven/progression systems:** ~80%
+- **Side systems (companions/formations/dungeons/titles/fate/leaderboard/PvP/Robux):** ~85%
+- **World, monsters, status effects, UI:** ~85%
+- **Overall vs. full TTP reference:** ~85%
 
 ### Remaining polish
-- Apply the 14 status effects inside combat (data is ready)
-- Unique terrain per realm (zones + teleport already exist)
 - Configure real Robux product/GamePass IDs in `RobuxService.lua`
-- Dao mastery counter for the Dao-count titles
+- Optional: animate monsters / idle wandering
+- Optional: richer per-realm zone decoration (themed props)

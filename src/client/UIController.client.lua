@@ -236,9 +236,33 @@ local realmNameL = mkLabel(realmPanel,"Qi Refinement",UDim2.new(1,-20,0,22),UDim
 local stageL     = mkLabel(realmPanel,"Stage 1 / 9",  UDim2.new(1,-20,0,16),UDim2.new(0,12,0,32),C.t2,12)
 local expFill    = mkBar(realmPanel, C.exp, UDim2.new(0,12,0,56), 12)
 local expText    = mkLabel(realmPanel,"0 / 0 EXP",    UDim2.new(1,-20,0,14),UDim2.new(0,12,0,72),C.t3,11,nil,Enum.TextXAlignment.Center)
-local lifeL      = mkLabel(realmPanel,"⏳ Alter —",   UDim2.new(1,-20,0,14),UDim2.new(0,12,0,90),C.green,12)
+local lifeL      = mkLabel(realmPanel,"⏳ Age —",     UDim2.new(1,-20,0,14),UDim2.new(0,12,0,90),C.green,12)
 local atkL       = mkLabel(realmPanel,"⚔️ ATK —",     UDim2.new(1,-20,0,14),UDim2.new(0,12,0,110),C.t3,11)
 local defL       = mkLabel(realmPanel,"🛡️ DEF —",     UDim2.new(0.5,-16,0,14),UDim2.new(0.5,4,0,110),C.t3,11)
+
+-- ── Loadout panel (active title / companion / formation / sect) ─
+local loadoutPanel = mkPanel("LoadoutPanel", UDim2.new(0,300,0,92), UDim2.new(0,14,0,162), Vector2.new(0,0), hudRoot)
+mkLabel(loadoutPanel,"⚙️ LOADOUT",UDim2.new(1,-20,0,12),UDim2.new(0,12,0,6),C.t3,10,Enum.Font.GothamBold)
+local loadTitleL = mkLabel(loadoutPanel,"🏆 —",UDim2.new(1,-20,0,14),UDim2.new(0,12,0,22),C.gold,11)
+local loadCompL  = mkLabel(loadoutPanel,"🐾 —",UDim2.new(0.5,-12,0,14),UDim2.new(0,12,0,40),C.cyan,11)
+local loadFormL  = mkLabel(loadoutPanel,"⭕ —",UDim2.new(0.5,-12,0,14),UDim2.new(0.5,0,0,40),C.a1,11)
+local loadSectL  = mkLabel(loadoutPanel,"🏯 —",UDim2.new(1,-20,0,14),UDim2.new(0,12,0,58),C.t2,11)
+local loadDungL  = mkLabel(loadoutPanel,"",UDim2.new(1,-20,0,14),UDim2.new(0,12,0,74),C.warn,11)
+
+bindAttr("TitleName",     function(v) loadTitleL.Text = "🏆 " .. (v ~= "" and v or "No title") end)
+bindAttr("CompanionName", function(v) loadCompL.Text  = "🐾 " .. (v ~= "" and v or "None") end)
+bindAttr("FormationName", function(v) loadFormL.Text  = "⭕ " .. (v ~= "" and v or "None") end)
+bindAttr("SectName",      function(v) loadSectL.Text  = "🏯 " .. (v ~= "" and v or "Sectless") end)
+local function updateDungeonHud()
+	local inD = player:GetAttribute("InDungeon")
+	if inD then
+		loadDungL.Text = ("🗺️ %s — Floor %d"):format(player:GetAttribute("DungeonName") or "?", player:GetAttribute("DungeonFloor") or 1)
+	else
+		loadDungL.Text = ""
+	end
+end
+bindAttr("InDungeon", updateDungeonHud)
+bindAttr("DungeonFloor", updateDungeonHud)
 
 local statPanel = mkPanel("StatPanel", UDim2.new(0,192,0,88), UDim2.new(1,-14,0,14), Vector2.new(1,0), hudRoot)
 local stonesL   = mkLabel(statPanel,"💰 0",          UDim2.new(1,-20,0,22),UDim2.new(0,12,0,8), C.gold,15,Enum.Font.GothamBold)
@@ -1172,12 +1196,12 @@ bindAttr("HP", updateHP); bindAttr("MaxHP", updateHP)
 
 local function updateAge()
 	if player:GetAttribute("LifespanInfinite") then
-		lifeL.Text = "⏳ Alter: ∞ (unsterblich)"; lifeL.TextColor3 = C.cyan; return
+		lifeL.Text = "⏳ Age: ∞ (immortal)"; lifeL.TextColor3 = C.cyan; return
 	end
 	local age = player:GetAttribute("Age") or 18
 	local maxLife = player:GetAttribute("MaxLifespan") or 85
 	local ratio = age / math.max(maxLife,1)
-	lifeL.Text = ("⏳ Alter %s / %s"):format(fmt(age), fmt(maxLife))
+	lifeL.Text = ("⏳ Age %s / %s"):format(fmt(age), fmt(maxLife))
 	lifeL.TextColor3 = ratio > 0.85 and C.hp or (ratio > 0.65 and C.warn or C.green)
 end
 bindAttr("Age", updateAge); bindAttr("MaxLifespan", updateAge); bindAttr("LifespanInfinite", updateAge)

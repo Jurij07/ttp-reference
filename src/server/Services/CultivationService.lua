@@ -169,6 +169,7 @@ function CultivationService.DoRealmUp(player: Player)
 	CultivationService.RecomputeStats(player)
 	local QuestService = require(script.Parent.QuestService)
 	QuestService.Refresh(player)
+	QuestService.OnRealmReached(player, profile.realm)
 	local TitleService = require(script.Parent.TitleService)
 	TitleService.CheckUnlocks(player)
 end
@@ -256,6 +257,7 @@ function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: bo
 			CultivationService.RecomputeStats(player)
 			local QuestService = require(script.Parent.QuestService)
 			QuestService.Refresh(player)
+			QuestService.OnRealmReached(player, profile.realm)
 		else
 			profile.exp = needed - 1
 			break
@@ -279,6 +281,9 @@ function CultivationService.AddStones(player: Player, amount: number)
 	profile.spiritStones = (profile.spiritStones or 0) + amount
 	if amount > 0 then
 		profile.lifetimeStones = (profile.lifetimeStones or 0) + amount
+		-- NPC quest progression: "earn X lifetime stones" objectives
+		local QuestService = require(script.Parent.QuestService)
+		QuestService.OnStonesChanged(player, profile.lifetimeStones)
 	end
 	player:SetAttribute("SpiritStones", profile.spiritStones)
 end

@@ -65,6 +65,8 @@ local function defaultProfile(): any
 		bookOfMisfortuneLastUsed = 0,    -- os.time() of last curse cast
 		sageSeatNumber         = 0,      -- claimed Sage seat (0 = none)
 		worldLevel             = 1,      -- highest world reached (1-4)
+		-- NPC quest chains: sequential quests from hub NPCs (max 3 active)
+		npcQuests              = { active = {}, completed = {} },
 	}
 end
 

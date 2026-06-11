@@ -86,6 +86,10 @@ local function rewardKill(player: Player, model: Model)
 
 	local name = model:GetAttribute("NPCName") or model.Name
 	notifyEvent:FireClient(player, ("⚔️ Defeated %s! +%d EXP, +%d 💰"):format(name, exp, stones), "good")
+
+	-- Notify the NPC quest system (lazy require avoids a circular dependency).
+	local ok, QS = pcall(require, script.Parent.QuestService)
+	if ok then (QS :: any).OnNPCKilled(player, tostring(name), realmId) end
 end
 
 function CombatService.DealDamage(player: Player, model: Model, rawDmg: number, triggerCounter: boolean)

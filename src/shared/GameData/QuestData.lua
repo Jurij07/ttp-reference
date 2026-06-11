@@ -75,4 +75,108 @@ function QuestData.GetQuest(id: number): Quest?
 	return _byId[id]
 end
 
+-- ════════════════════════════════════════════════════════════
+-- NPC QUEST CHAINS — sequential quests handed out by hub NPCs.
+-- Each chain unlocks one quest at a time (complete ve_01 → ve_02
+-- becomes available). Players can hold max 3 active NPC quests
+-- (enforced in QuestService.MAX_NPC_ACTIVE).
+-- ════════════════════════════════════════════════════════════
+
+export type NpcObjective = {
+	type: string,         -- "kill" | "kill_realm" | "reach_realm" | "earn_stones"
+	target: string?,      -- NPC name for "kill" (plain substring match)
+	realm: number?,       -- realm id for "kill_realm" / "reach_realm"
+	count: number?,       -- kills / stones needed
+	desc: string,
+}
+
+export type NpcRewards = { exp: number?, stones: number? }
+
+export type NpcQuest = {
+	id: string,
+	chain: string,        -- chain key (one chain per NPC giver)
+	step: number,         -- position in the chain (1 = starter)
+	giver: string,        -- display name of the quest-giving NPC
+	icon: string,
+	title: string,
+	desc: string,
+	objectives: { NpcObjective },
+	rewards: NpcRewards,
+	next: string?,        -- id of the follow-up quest (nil = chain end)
+}
+
+QuestData.NPC_CHAINS = {
+	village_elder = {
+		{ id="ve_01", chain="village_elder", step=1, giver="Village Elder", icon="👴",
+		  title="Wolves at the Gates",
+		  desc="Qi Wolves have been prowling near the village. Cull 5 of them in the Qi Meadow.",
+		  objectives={ { type="kill", target="Qi Wolf", count=5, desc="Defeat 5 Qi Wolves" } },
+		  rewards={ exp=400, stones=150 }, next="ve_02" },
+		{ id="ve_02", chain="village_elder", step=2, giver="Village Elder", icon="👴",
+		  title="Pest Control",
+		  desc="The Spirit Rabbits are eating our herb gardens bare. Thin their numbers.",
+		  objectives={ { type="kill", target="Spirit Rabbit", count=3, desc="Defeat 3 Spirit Rabbits" } },
+		  rewards={ exp=500, stones=200 }, next="ve_03" },
+		{ id="ve_03", chain="village_elder", step=3, giver="Village Elder", icon="👴",
+		  title="The Alpha",
+		  desc="A crowned beast leads the pack — the Realm Guardian Wolf. Slay it and the meadow will know peace.",
+		  objectives={ { type="kill", target="Realm Guardian Wolf", count=1, desc="Defeat the Realm Guardian Wolf" } },
+		  rewards={ exp=1500, stones=600 }, next=nil },
+	},
+	cultivation_master = {
+		{ id="cm_01", chain="cultivation_master", step=1, giver="Cultivation Master", icon="🧙",
+		  title="Beyond Qi Refinement",
+		  desc="Your foundation must be solid. Break through to the Foundation Establishment realm.",
+		  objectives={ { type="reach_realm", realm=2, desc="Reach Foundation Establishment (Realm 2)" } },
+		  rewards={ exp=800, stones=300 }, next="cm_02" },
+		{ id="cm_02", chain="cultivation_master", step=2, giver="Cultivation Master", icon="🧙",
+		  title="Test of the Cliffs",
+		  desc="Strength is proven in battle. Defeat 10 beasts in the Foundation Cliffs.",
+		  objectives={ { type="kill_realm", realm=2, count=10, desc="Defeat 10 beasts in the Realm-2 zone" } },
+		  rewards={ exp=2000, stones=700 }, next="cm_03" },
+		{ id="cm_03", chain="cultivation_master", step=3, giver="Cultivation Master", icon="🧙",
+		  title="Forge the Golden Core",
+		  desc="You are ready. Condense your Golden Core and step into true cultivation.",
+		  objectives={ { type="reach_realm", realm=3, desc="Reach Golden Core (Realm 3)" } },
+		  rewards={ exp=6000, stones=2000 }, next=nil },
+	},
+	merchant = {
+		{ id="mer_01", chain="merchant", step=1, giver="Merchant", icon="💰",
+		  title="Seed Capital",
+		  desc="Coin makes the world turn, cultivator. Earn 2,000 Spirit Stones in total and I'll know you're serious.",
+		  objectives={ { type="earn_stones", count=2000, desc="Earn 2,000 lifetime Spirit Stones" } },
+		  rewards={ exp=600, stones=400 }, next="mer_02" },
+		{ id="mer_02", chain="merchant", step=2, giver="Merchant", icon="💰",
+		  title="Shell Shortage",
+		  desc="Iron Beetle shells fetch a fine price. Bring down 5 of them for my caravan.",
+		  objectives={ { type="kill", target="Iron Beetle", count=5, desc="Defeat 5 Iron Beetles" } },
+		  rewards={ exp=900, stones=500 }, next=nil },
+	},
+}
+
+-- Flat lookup by quest id.
+QuestData.NPC_ALL = {} :: { [string]: NpcQuest }
+for _, chain in pairs(QuestData.NPC_CHAINS) do
+	for _, q in ipairs(chain) do
+		QuestData.NPC_ALL[q.id] = q
+	end
+end
+
+-- The quest that unlocks after `completedId` (nil if chain ends there).
+function QuestData.GetNextNpcQuest(completedId: string): NpcQuest?
+	local q = QuestData.NPC_ALL[completedId]
+	if q and q.next then return QuestData.NPC_ALL[q.next] end
+	return nil
+end
+
+-- First quest of every chain (what a fresh player can accept).
+function QuestData.GetNpcStarterQuests(): { NpcQuest }
+	local out: { NpcQuest } = {}
+	for _, chain in pairs(QuestData.NPC_CHAINS) do
+		if chain[1] then table.insert(out, chain[1]) end
+	end
+	table.sort(out, function(a, b) return a.id < b.id end)
+	return out
+end
+
 return QuestData

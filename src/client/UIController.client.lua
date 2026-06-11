@@ -212,6 +212,7 @@ local dungeonLayer   = mkOverlay("DungeonLayer")
 local leaderLayer    = mkOverlay("LeaderLayer")
 local bookLayer      = mkOverlay("BookLayer")
 local storeLayer     = mkOverlay("StoreLayer")
+local huntLayer      = mkOverlay("HuntLayer")
 local SectData       = require(GameData:WaitForChild("SectData"))
 local CompanionData  = require(GameData:WaitForChild("CompanionData"))
 local FormationData  = require(GameData:WaitForChild("FormationData"))
@@ -1761,7 +1762,7 @@ function closeAllOverlays()
 	companionLayer.Visible = false; formationLayer.Visible = false
 	titleLayer.Visible = false;     dungeonLayer.Visible = false
 	leaderLayer.Visible = false;    bookLayer.Visible = false
-	storeLayer.Visible = false
+	storeLayer.Visible = false;     huntLayer.Visible = false
 end
 
 mainMenuBtn.MouseButton1Click:Connect(function() closeAllOverlays(); mainMenuLayer.Visible = true end)
@@ -1845,6 +1846,122 @@ player:GetAttributeChangedSignal("SpiritStones"):Connect(function()
 end)
 
 -- ════════════════════════════════════════════════════════════
+-- ── Idle layer: passive-rate HUD, Auto-Hunt picker, offline summary
+-- ════════════════════════════════════════════════════════════
+do
+	-- HUD widget (bottom-left, above the seclusion panel)
+	local idlePanel = mkPanel("IdlePanel", UDim2.new(0,215,0,62), UDim2.new(0,14,1,-112), Vector2.new(0,1), hudRoot)
+	mkLabel(idlePanel,"♾️ IDLE CULTIVATION",UDim2.new(1,-16,0,12),UDim2.new(0,8,0,4),C.t3,9,Enum.Font.GothamBold)
+	local idleRateL = mkLabel(idlePanel,"☯️ +0 EXP/s",UDim2.new(1,-16,0,15),UDim2.new(0,8,0,18),C.exp,12,Enum.Font.GothamBold)
+	local idleHuntL = mkLabel(idlePanel,"🏹 Hunt: off",UDim2.new(1,-16,0,14),UDim2.new(0,8,0,38),C.t3,11)
+
+	local function refreshIdleHud()
+		local needed = (player:GetAttribute("EXPNeeded") or 0) :: number
+		idleRateL.Text = ("☯️ +%s EXP/s passive"):format(fmt(needed * Config.IDLE_STAGE_FRACTION_PER_SEC))
+		local hr = (player:GetAttribute("HuntRealm") or 0) :: number
+		if hr >= 1 then
+			idleHuntL.Text = ("🏹 %s — %s kills"):format(
+				WorldData.Theme(hr).name, fmt((player:GetAttribute("HuntKills") or 0) :: number))
+			idleHuntL.TextColor3 = C.green
+		else
+			idleHuntL.Text = "🏹 Hunt: off — pick a zone!"
+			idleHuntL.TextColor3 = C.t3
+		end
+	end
+	bindAttr("EXPNeeded", refreshIdleHud)
+	bindAttr("HuntRealm", refreshIdleHud)
+	bindAttr("HuntKills", refreshIdleHud)
+
+	-- ── Auto-Hunt zone picker ────────────────────────────────
+	local huntBtn = mkButton(hudRoot,"🏹",UDim2.new(0,46,0,46),UDim2.new(1,-274,1,-14),C.bg4,Vector2.new(1,1))
+
+	local card = mkPanel("HuntCard", UDim2.new(0,560,0,560), UDim2.fromScale(0.5,0.5), Vector2.new(0.5,0.5), huntLayer)
+	mkLabel(card,"🏹 Auto-Hunt",UDim2.new(1,-90,0,26),UDim2.new(0,16,0,12),C.gold,20,Enum.Font.GothamBold)
+	local huntSub = mkLabel(card,
+		"Your cultivator fights on their own. Pick a zone — kills, EXP and stones flow in automatically, even while you are offline. Realm bosses are challenged for you once you are strong enough.",
+		UDim2.new(1,-32,0,44),UDim2.new(0,16,0,42),C.t2,12)
+	huntSub.TextWrapped = true
+	local closeHunt = mkButton(card,"✕",UDim2.new(0,32,0,32),UDim2.new(1,-12,0,12),C.bg4,Vector2.new(1,0))
+	local stopBtn = mkButton(card,"⛔ Stop hunting",UDim2.new(1,-32,0,36),UDim2.new(0,16,1,-14),C.bg4,Vector2.new(0,1))
+	local huntList = mkScrollList(card, UDim2.new(1,-32,1,-160), UDim2.new(0,16,0,96))
+
+	local function rebuildHunt()
+		for _, ch in ipairs(huntList:GetChildren()) do
+			if ch:IsA("Frame") then ch:Destroy() end
+		end
+		local myRealm = (player:GetAttribute("Realm") or 1) :: number
+		local current = (player:GetAttribute("HuntRealm") or 0) :: number
+		for _, r in ipairs(WorldData.Realms()) do
+			local row = Instance.new("Frame")
+			row.Size = UDim2.new(1,-6,0,56); row.BackgroundColor3 = C.bg3
+			corner(row,8); stroke(row, r == current and C.green or C.border)
+			row.LayoutOrder = r; row.Parent = huntList
+			local realmInfo = CultivationData.GetRealm(r)
+			local locked = r > myRealm
+			mkLabel(row, ("%s  ·  %s"):format(WorldData.Theme(r).name, realmInfo and realmInfo.name or "?"),
+				UDim2.new(1,-150,0,18),UDim2.new(0,12,0,8), locked and C.t3 or C.t1, 13, Enum.Font.GothamBold)
+			local mobs = NPCData.GetRealmNPCs(r)
+			local sub = "—"
+			if mobs and #mobs > 0 then
+				sub = ("%s %s  …  %s"):format(mobs[1].icon, mobs[1].name, mobs[#mobs].name)
+			end
+			mkLabel(row, sub, UDim2.new(1,-150,0,14),UDim2.new(0,12,0,30), C.t3, 11)
+			if locked then
+				mkLabel(row,"🔒",UDim2.new(0,110,0,22),UDim2.new(1,-122,0,17),C.t3,16,nil,Enum.TextXAlignment.Center)
+			else
+				local b = mkButton(row, r == current and "Hunting ✓" or "Hunt",
+					UDim2.new(0,110,0,34), UDim2.new(1,-122,0,11), r == current and C.green or C.a1)
+				b.MouseButton1Click:Connect(function()
+					Net.Event("SetHuntRealm"):FireServer(r == current and 0 or r)
+				end)
+			end
+		end
+	end
+
+	huntBtn.MouseButton1Click:Connect(function()
+		closeAllOverlays(); rebuildHunt(); huntLayer.Visible = true
+	end)
+	closeHunt.MouseButton1Click:Connect(function() huntLayer.Visible = false end)
+	stopBtn.MouseButton1Click:Connect(function() Net.Event("SetHuntRealm"):FireServer(0) end)
+	player:GetAttributeChangedSignal("HuntRealm"):Connect(function()
+		if huntLayer.Visible then rebuildHunt() end
+	end)
+	player:GetAttributeChangedSignal("Realm"):Connect(function()
+		if huntLayer.Visible then rebuildHunt() end
+	end)
+
+	-- ── "Welcome back" offline summary ───────────────────────
+	local offCard = mkPanel("OfflineCard", UDim2.new(0,420,0,290), UDim2.fromScale(0.5,0.5), Vector2.new(0.5,0.5), gui)
+	offCard.Visible = false; offCard.ZIndex = 60
+	mkLabel(offCard,"🌙 Welcome back!",UDim2.new(1,-32,0,28),UDim2.new(0,16,0,14),C.gold,20,Enum.Font.GothamBold)
+	local offTimeL  = mkLabel(offCard,"",UDim2.new(1,-32,0,18),UDim2.new(0,16,0,52),C.t2,13)
+	local offExpL   = mkLabel(offCard,"",UDim2.new(1,-32,0,20),UDim2.new(0,16,0,86),C.exp,15,Enum.Font.GothamBold)
+	local offStoneL = mkLabel(offCard,"",UDim2.new(1,-32,0,20),UDim2.new(0,16,0,114),C.gold,15,Enum.Font.GothamBold)
+	local offKillL  = mkLabel(offCard,"",UDim2.new(1,-32,0,20),UDim2.new(0,16,0,142),C.green,15,Enum.Font.GothamBold)
+	mkLabel(offCard,
+		("Offline gains run at %d%% efficiency, up to %dh."):format(Config.OFFLINE_EFFICIENCY*100, Config.OFFLINE_CAP_HOURS),
+		UDim2.new(1,-32,0,16),UDim2.new(0,16,0,176),C.t3,11)
+	local offOk = mkButton(offCard,"✨ Continue cultivating",UDim2.new(1,-32,0,40),UDim2.new(0,16,1,-14),C.a1,Vector2.new(0,1))
+	offOk.MouseButton1Click:Connect(function() offCard.Visible = false end)
+
+	Net.Event("OfflineProgress").OnClientEvent:Connect(function(sum: any)
+		if type(sum) ~= "table" then return end
+		local secs = tonumber(sum.seconds) or 0
+		offTimeL.Text = ("Away for %dh %02dm — your cultivation continued:")
+			:format(math.floor(secs/3600), math.floor(secs % 3600 / 60))
+		offExpL.Text   = ("☯️ +%s EXP"):format(fmt(tonumber(sum.exp) or 0))
+		offStoneL.Text = ("💰 +%s Spirit Stones"):format(fmt(tonumber(sum.stones) or 0))
+		local kills = tonumber(sum.kills) or 0
+		offKillL.Text = kills > 0
+			and ("⚔️ %s Auto-Hunt kills"):format(fmt(kills))
+			or  "🏹 No Auto-Hunt active — pick a zone!"
+		offCard.Visible = true
+	end)
+	-- Ask the server for any pending offline summary now that the UI is ready.
+	Net.Event("GetOfflineSummary"):FireServer()
+end
+
+-- ════════════════════════════════════════════════════════════
 -- ── Keyboard shortcuts
 -- ════════════════════════════════════════════════════════════
 local useTechRemote = Net.Event("UseTechnique")
@@ -1855,7 +1972,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
 	if key == Enum.KeyCode.Escape then
 		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible
 			or sectLayer.Visible or worldLayer.Visible or companionLayer.Visible or formationLayer.Visible
-			or titleLayer.Visible or dungeonLayer.Visible or leaderLayer.Visible or bookLayer.Visible or storeLayer.Visible then
+			or titleLayer.Visible or dungeonLayer.Visible or leaderLayer.Visible or bookLayer.Visible
+			or storeLayer.Visible or huntLayer.Visible then
 			closeAllOverlays()
 		elseif seclPopup.Visible then
 			seclPopup.Visible = false

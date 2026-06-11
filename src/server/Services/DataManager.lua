@@ -67,6 +67,9 @@ local function defaultProfile(): any
 		worldLevel             = 1,      -- highest world reached (1-4)
 		-- NPC quest chains: sequential quests from hub NPCs (max 3 active)
 		npcQuests              = { active = {}, completed = {} },
+		-- Idle layer
+		lastSeenAt             = 0,   -- os.time() der letzten Aktivität (Offline-Fortschritt)
+		idleHuntRealm          = 0,   -- aktive Auto-Hunt-Zone (0 = aus)
 	}
 end
 
@@ -106,6 +109,8 @@ local function reconcile(profile: any)
 	if type(profile.lifetimeStones) ~= "number" then profile.lifetimeStones = 0 end
 	if type(profile.daoMastered) ~= "table" then profile.daoMastered = {} end
 	if type(profile.pvpEnabled) ~= "boolean" then profile.pvpEnabled = false end
+	if type(profile.lastSeenAt) ~= "number" then profile.lastSeenAt = 0 end
+	if type(profile.idleHuntRealm) ~= "number" then profile.idleHuntRealm = 0 end
 end
 
 local function keyFor(userId: number): string

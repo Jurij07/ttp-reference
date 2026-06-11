@@ -47,4 +47,18 @@ Config.NPC_SPAWN_SPREAD = 16
 Config.STARTING_SPIRIT_STONES = 100
 Config.STARTING_KARMA         = 0
 
+-- ── Idle-Mechanik (Overmortal-Stil) ────────────────────────
+-- Passive Kultivierung: pro Sekunde fließt dieser Bruchteil der aktuellen
+-- Stage-EXP — ohne Multiplikatoren dauert eine Stage also ~2 Minuten.
+Config.IDLE_STAGE_FRACTION_PER_SEC = 1 / 120
+-- Spirit-Stone-Trickle pro Sekunde und Realm-Stufe.
+Config.IDLE_STONES_PER_SEC_BASE    = 0.4
+-- Auto-Hunt: alle X Sekunden wird ein Kampf simuliert.
+Config.IDLE_HUNT_TICK_SECS         = 5
+-- Offline-Fortschritt: Effizienz, Obergrenze und Mindest-Abwesenheit.
+Config.OFFLINE_EFFICIENCY          = 0.5
+Config.OFFLINE_CAP_HOURS           = 12
+Config.OFFLINE_MIN_SECS            = 120
+Config.OFFLINE_MAX_HUNT_KILLS      = 1500
+
 return Config

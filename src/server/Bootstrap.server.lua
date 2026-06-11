@@ -23,6 +23,7 @@ local PvPService         = require(script.Parent.Services.PvPService)
 local LeaderboardService = require(script.Parent.Services.LeaderboardService)
 local RobuxService       = require(script.Parent.Services.RobuxService)
 local NPCService         = require(script.Parent.Services.NPCService)
+local IdleService        = require(script.Parent.Services.IdleService)
 
 -- World systems (R1–R26 world concept)
 local WorldTransitionService          = require(script.Parent.Services.WorldTransitionService)
@@ -58,6 +59,7 @@ PvPService.Start()
 LeaderboardService.Start()
 RobuxService.Start()
 NPCService.Start()
+IdleService.Start()
 
 -- World systems
 WorldTransitionService.Start()

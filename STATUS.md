@@ -16,6 +16,9 @@ This compares the main elements of *Top Tier Providence* (novel / manhwa + the
 | EXP / breakthrough curve | Escalating EXP per stage/realm | ✅ Real values from reference |
 | Lifespan & aging | Each realm grants more lifespan; death = rebirth at 18 | ✅ Real lifespan values, time-scaled aging |
 | Seclusion (closed-door cultivation) | Spend years meditating for EXP | ✅ Full system with year-spinner UI |
+| Idle cultivation | EXP flows passively every second | ✅ Passive tick + stone trickle (IdleService) |
+| Auto-Hunt | Pick a zone, fights resolve automatically | ✅ Simulated fights, auto boss challenges |
+| Offline progress | Gains while logged out | ✅ Capped 12h at 50% efficiency, "Welcome back" popup |
 
 ## 2. Providence (the "roll your fate" system)
 

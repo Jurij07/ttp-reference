@@ -51,6 +51,60 @@ local world = Workspace:FindFirstChild("World")
 if world then world:Destroy() end
 world = Instance.new("Folder"); world.Name = "World"; world.Parent = Workspace
 
+-- ── Floating-island terrain ──────────────────────────────────────────────────
+-- Every walkable area sits on a low-poly floating island (reference art style):
+-- a flat grassy top the size of a Baseplate (512×512), a tapered rock body in
+-- stepped layers, a rounded bottom cap and hanging stalactite clusters.
+local Terrain = Workspace.Terrain
+local TM = Enum.Material
+Terrain:Clear()
+
+local function fillBox(cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, mat: Enum.Material)
+	Terrain:FillBlock(CFrame.new(cx, cy, cz), Vector3.new(sx, sy, sz), mat)
+end
+
+local function fillSphere(cx: number, cy: number, cz: number, r: number, mat: Enum.Material)
+	Terrain:FillBall(Vector3.new(cx, cy, cz), r, mat)
+end
+
+-- Tapered body layers for a 512-stud island: { yOffset, height, width }.
+-- Each layer overlaps the one above so the silhouette reads as carved rock.
+local ISLAND_LAYERS = {
+	{  -5,  8, 496 },
+	{ -16, 16, 490 },
+	{ -32, 18, 440 },
+	{ -50, 20, 375 },
+	{ -68, 20, 295 },
+	{ -85, 18, 200 },
+	{ -99, 14, 120 },
+}
+
+-- Hanging stalactite blobs: { dx, dy, dz, radius } — tuned so every sphere
+-- overlaps the body layer above it (no floating rocks).
+local ISLAND_STALACTITES = {
+	{ 200, -40,  130, 28 }, { -195, -42,  100, 26 }, { 215, -38, -150, 30 },
+	{ -170, -44, -210, 24 }, {  30, -34,  230, 28 }, { -230, -30,   20, 27 },
+	{ 110, -60,  140, 22 }, {  -90, -64, -130, 22 }, {   0, -62,  185, 24 },
+	{   0, -46, -190, 24 }, { 170, -58,  -50, 20 }, { -155, -60,   60, 22 },
+	{  60, -95,   70, 18 }, {  -80, -98,  -50, 16 }, { 130, -78,  -90, 18 },
+	{ -40, -74,  140, 16 },
+}
+
+-- size = side length of the square top (512 = Baseplate). surfaceY is the
+-- centre of the 8-stud-thick top slab, so the walkable surface is surfaceY + 4.
+local function makeIsland(cx: number, surfaceY: number, cz: number, size: number,
+		topMat: Enum.Material, rockMat: Enum.Material)
+	local k = size / 512
+	fillBox(cx, surfaceY, cz, size, 8, size, topMat)
+	for _, L in ipairs(ISLAND_LAYERS) do
+		fillBox(cx, surfaceY + L[1] * k, cz, L[3] * k, math.max(L[2] * k, 6), L[3] * k, rockMat)
+	end
+	fillSphere(cx, surfaceY - 112 * k, cz, math.max(72 * k, 14), rockMat)
+	for _, s in ipairs(ISLAND_STALACTITES) do
+		fillSphere(cx + s[1] * k, surfaceY + s[2] * k, cz + s[3] * k, math.max(s[4] * k, 7), rockMat)
+	end
+end
+
 -- ── Part helpers ─────────────────────────────────────────────────────────────
 local function part(name: string, size: Vector3, pos: Vector3, color: Color3,
 		mat: Enum.Material?, parent: Instance?): Part
@@ -133,7 +187,14 @@ local rng = Random.new(20260610)
 -- ══════════════════════════════════════════════════════════════════════════════
 local w1 = Instance.new("Folder"); w1.Name = "World1_MortalEarth"; w1.Parent = world
 
-part("Ground", Vector3.new(4000, 4, 4000), Vector3.new(0, Y1 - 2, 0), Color3.fromRGB(30, 45, 20), Enum.Material.Grass, w1)
+-- One Baseplate-sized floating island for the hub village and one per realm
+-- zone (ring of 9). The walkable tops sit exactly at Y1, where the old flat
+-- ground used to be, so every structure/NPC position stays valid.
+makeIsland(WorldData.HUB_CENTER.X, Y1 - 4, WorldData.HUB_CENTER.Z, 512, TM.Grass, TM.Rock)
+for _, islandRealmId in ipairs(WorldData.Realms()) do
+	local zc = WorldData.ZoneCenter(islandRealmId)
+	makeIsland(zc.X, Y1 - 4, zc.Z, 512, TM.Grass, TM.Rock)
+end
 
 -- ── SPAWN VILLAGE (central hub) ───────────────────────────────────────────────
 local hub    = WorldData.HUB_CENTER
@@ -212,6 +273,24 @@ do  -- Wall of Eternity
 	list.ScrollBarThickness = 6; list.CanvasSize = UDim2.new(); list.AutomaticCanvasSize = Enum.AutomaticSize.Y; list.Parent = sg
 	local ll = Instance.new("UIListLayout"); ll.Padding = UDim.new(0, 6); ll.HorizontalAlignment = Enum.HorizontalAlignment.Center; ll.Parent = list
 	CollectionService:AddTag(wall, "WallOfEternity")
+end
+
+do  -- Quest-giver NPCs (sequential quest chains — see QuestData.NPC_CHAINS)
+	local GIVERS = {
+		{ name = "Village Elder",      icon = "👴", dx =  28, dz =  -8, robe = Color3.fromRGB(120, 100, 70)  },
+		{ name = "Cultivation Master", icon = "🧙", dx = -10, dz =  30, robe = Color3.fromRGB(90, 70, 140)   },
+		{ name = "Merchant",           icon = "💰", dx = -24, dz = -22, robe = Color3.fromRGB(150, 110, 50)  },
+	}
+	for _, g in ipairs(GIVERS) do
+		local gx, gz = hub.X + g.dx, hub.Z + g.dz
+		local robe = cyl("QuestGiver", 3.5, 5, Vector3.new(gx, Y1 + 2.5, gz), g.robe, Enum.Material.Fabric, hubZone)
+		robe.Orientation = Vector3.new(0, 0, 0)
+		ball("QuestGiverHead", 2.2, Vector3.new(gx, Y1 + 6, gz), Color3.fromRGB(235, 200, 170), Enum.Material.SmoothPlastic, hubZone)
+		ball("QuestMark", 1.4, Vector3.new(gx, Y1 + 9, gz), Color3.fromRGB(255, 215, 60), Enum.Material.Neon, hubZone)
+		billboard(hubZone, Vector3.new(gx, Y1 + 11, gz),
+			("%s %s"):format(g.icon, g.name), Color3.fromRGB(255, 215, 120),
+			"❗ Quests [Quest Log]", Color3.fromRGB(255, 240, 200))
+	end
 end
 
 -- ── REALM ZONES (one platform per realm, themed into 5 biomes) ─────────────────
@@ -431,9 +510,12 @@ end
 -- ── UNDERGROUND · YELLOW SPRING / NETHERWORLD ─────────────────────────────────
 do
 	local nether = Instance.new("Folder"); nether.Name = "Netherworld"; nether.Parent = w1
-	local netherY = -80
+	-- Deep below the islands so the hub island's rock body and stalactites
+	-- (which reach ~190 studs down) never clip into the Netherworld.
+	local netherY = -320
+	local shaftH = (Y1 + zh) - netherY
 	local sf = WorldData.ZoneCenter(1) + Vector3.new(30, 0, 30)
-	part("Shaft", Vector3.new(16, 84, 16), Vector3.new(sf.X, netherY + 42, sf.Z), Color3.fromRGB(20, 18, 26), Enum.Material.Rock, nether).Transparency = 0.5
+	part("Shaft", Vector3.new(16, shaftH, 16), Vector3.new(sf.X, netherY + shaftH / 2, sf.Z), Color3.fromRGB(20, 18, 26), Enum.Material.Rock, nether).Transparency = 0.5
 	signBoard(nether, Vector3.new(sf.X, Y1 + zh + 4, sf.Z), Vector3.new(8, 3, 0.5), "↓ Netherworld", Color3.fromRGB(255, 200, 80), Color3.fromRGB(20, 18, 10))
 	part("NetherFloor", Vector3.new(600, 8, 600), Vector3.new(0, netherY, 0), Color3.fromRGB(10, 8, 16), Enum.Material.Slate, nether)
 	local prev = Vector3.new(-260, netherY + 5, -200)
@@ -473,8 +555,10 @@ portalArch(hubZone, "Portal_W1_to_W2", Vector3.new(hub.X + 30, hubY, hub.Z), Col
 -- ══════════════════════════════════════════════════════════════════════════════
 local w2 = Instance.new("Folder"); w2.Name = "World2_ImmortalSky"; w2.Parent = world
 
-local cloud = cyl("CloudSea", 1200, 20, Vector3.new(0, Y2, 0), Color3.fromRGB(240, 245, 255), Enum.Material.SmoothPlastic, w2)
-cloud.Transparency = 0.3
+-- Two floating sky islands replace the old cloud sea: one under the Jade
+-- Palace City / arrival gate, one under the Immortal Plain to the east.
+makeIsland(0,   Y2, 0, 512, TM.LeafyGrass, TM.Glacier)
+makeIsland(560, Y2, 0, 512, TM.LeafyGrass, TM.Glacier)
 
 local av = WorldData.WORLD_ARRIVAL[2]
 cyl("W2ArrivalPad", 40, 6, Vector3.new(av.X, Y2 + 3, av.Z), Color3.fromRGB(140, 220, 180), Enum.Material.Marble, w2)
@@ -577,8 +661,11 @@ billboard(w2, Vector3.new(0, Y2 + 140, 0), "✦ IMMORTAL SKY", Color3.fromRGB(10
 -- ══════════════════════════════════════════════════════════════════════════════
 local w3 = Instance.new("Folder"); w3.Name = "World3_SageHeaven"; w3.Parent = world
 
-cyl("SageFloor", 800, 6, Vector3.new(0, Y3 + 3, 0), Color3.fromRGB(20, 10, 40), Enum.Material.SmoothPlastic, w3)
-cyl("SageGlow", 810, 3, Vector3.new(0, Y3 + 6, 0), Color3.fromRGB(120, 60, 255), Enum.Material.Neon, w3)
+-- Main Sage Heaven island (walkable top at Y3+6, where the old floor was)
+-- plus a satellite islet carrying the Supreme Platform pillar to the south.
+makeIsland(0, Y3 + 2, 0,   512, TM.Grass, TM.Slate)
+makeIsland(0, Y3 + 2, 420, 256, TM.Grass, TM.Slate)
+cyl("SageGlow", 510, 3, Vector3.new(0, Y3 + 6, 0), Color3.fromRGB(120, 60, 255), Enum.Material.Neon, w3)
 
 do
 	part("MysticPalace", Vector3.new(120, 80, 120), Vector3.new(0, Y3 + 46, 0), Color3.fromRGB(30, 15, 60), Enum.Material.Marble, w3)
@@ -659,8 +746,8 @@ do
 end
 
 cyl("W3ArrivalPad", 40, 6, Vector3.new(WorldData.WORLD_ARRIVAL[3].X, Y3 + 9, WorldData.WORLD_ARRIVAL[3].Z), Color3.fromRGB(120, 80, 160), Enum.Material.Marble, w3)
-portalArch(w3, "Portal_W3_to_W2", Vector3.new(-260, Y3 + 6, 0), Color3.fromRGB(120, 200, 120), "↓ Immortal Sky")
-portalArch(w3, "Portal_W3_to_W4", Vector3.new(260, Y3 + 6, 0), Color3.fromRGB(255, 60, 60), "↑ Primal Chaos (R23)")
+portalArch(w3, "Portal_W3_to_W2", Vector3.new(-240, Y3 + 6, 0), Color3.fromRGB(120, 200, 120), "↓ Immortal Sky")
+portalArch(w3, "Portal_W3_to_W4", Vector3.new(240, Y3 + 6, 0), Color3.fromRGB(255, 60, 60), "↑ Primal Chaos (R23)")
 billboard(w3, Vector3.new(0, Y3 + 200, 0), "⋆ SAGE HEAVEN", Color3.fromRGB(200, 100, 255), "Realm 17 — 23", Color3.fromRGB(255, 255, 255))
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -668,7 +755,10 @@ billboard(w3, Vector3.new(0, Y3 + 200, 0), "⋆ SAGE HEAVEN", Color3.fromRGB(200
 -- ══════════════════════════════════════════════════════════════════════════════
 local w4 = Instance.new("Folder"); w4.Name = "World4_PrimalChaos"; w4.Parent = world
 
-cyl("ChaosFloor", 1000, 10, Vector3.new(0, Y4 + 5, 0), Color3.fromRGB(8, 4, 16), Enum.Material.Basalt, w4)
+-- Primal Chaos: a black basalt main island (top at Y4+10, like the old floor)
+-- and a detached islet to the west carrying the Chaotic Forbidden Zone.
+makeIsland(0,    Y4 + 6, 0, 512, TM.Basalt, TM.Basalt)
+makeIsland(-450, Y4 + 6, 0, 320, TM.Basalt, TM.Basalt)
 
 local veinCols = {
 	Color3.fromRGB(255, 30, 30), Color3.fromRGB(255, 120, 0), Color3.fromRGB(180, 0, 255),

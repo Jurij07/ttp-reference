@@ -13,7 +13,9 @@ local WorldData = {}
 
 WorldData.HUB_CENTER   = Vector3.new(0, 4, 0)
 WorldData.HUB_RADIUS   = 46
-WorldData.RING_RADIUS  = 300      -- distance from hub to each zone centre
+-- Each zone sits on its own 512×512 floating island; at ring radius 900 the
+-- nine islands are ~615 studs apart centre-to-centre (≈100-stud air gaps).
+WorldData.RING_RADIUS  = 900      -- distance from hub to each zone centre
 WorldData.ZONE_RADIUS  = 62       -- platform radius of each realm zone
 WorldData.ZONE_HEIGHT  = 4        -- platform thickness
 

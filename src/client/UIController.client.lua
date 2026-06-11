@@ -390,141 +390,415 @@ hubBtn("store","💎 Store")
 hubBtn("leave","🔄 Leave")
 
 -- ════════════════════════════════════════════════════════════
--- ── Inventory overlay
+-- ── Inventory overlay — Character | Inventory | Quest Log tabs
+--    (Spirit-Charms layout: artifact grid · paper doll · stats)
 -- ════════════════════════════════════════════════════════════
-local invCard = mkPanel("InvCard",UDim2.new(0,720,0,500),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), inventoryLayer)
-mkLabel(invCard,"🎒  INVENTORY & EQUIPMENT",UDim2.new(1,-30,0,24),UDim2.fromOffset(15,14),C.gold,18,Enum.Font.GothamBold)
-local closeInv = mkButton(invCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
+-- UI handles live in this table so the do..end block below frees
+-- its locals (Luau 200-register limit) while handlers stay reachable.
+local invUI: { [string]: any } = {}
+local closeInv: TextButton
+local rebuildEquipment: (equipment: { [string]: number? }) -> ()
+local rebuildInventory: (inventory: { [any]: any }) -> ()
 
--- ── Left: character paperdoll ───────────────────────────────
-local dollPanel = Instance.new("Frame")
-dollPanel.Size = UDim2.new(0,300,1,-60); dollPanel.Position = UDim2.fromOffset(12,50)
-dollPanel.BackgroundColor3 = C.bg3; dollPanel.BorderSizePixel = 0
-corner(dollPanel,8); stroke(dollPanel,C.border); dollPanel.Parent = invCard
-mkLabel(dollPanel,"EQUIPMENT",UDim2.new(1,-20,0,16),UDim2.fromOffset(12,8),C.t3,11,Enum.Font.GothamBold)
+do
+	local invCard = mkPanel("InvCard",UDim2.new(0,980,0,560),UDim2.fromScale(0.5,0.5),Vector2.new(0.5,0.5), inventoryLayer)
+	closeInv = mkButton(invCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
 
--- Simple character silhouette in the centre
-local charBody = Instance.new("Frame")
-charBody.Size = UDim2.fromOffset(70,150); charBody.Position = UDim2.new(0.5,0,0,40)
-charBody.AnchorPoint = Vector2.new(0.5,0); charBody.BackgroundColor3 = C.bg5
-charBody.BorderSizePixel = 0; corner(charBody,10); stroke(charBody, C.a1); charBody.Parent = dollPanel
-mkLabel(charBody,"🧍",UDim2.fromScale(1,1),UDim2.fromOffset(0,0),C.t2,46,nil,Enum.TextXAlignment.Center).TextYAlignment = Enum.TextYAlignment.Center
+	-- ── Tab bar ───────────────────────────────────────────────
+	local TAB_NAMES = { "⚔️ Character", "🎒 Inventory", "📜 Quest Log" }
+	local tabBtns: { TextButton } = {}
+	local tabFrames: { Frame } = {}
+	for i = 1, 3 do
+		local tb = mkButton(invCard, TAB_NAMES[i], UDim2.new(0,150,0,30), UDim2.fromOffset(12 + (i-1)*156, 8), C.bg4)
+		tb.TextSize = 13
+		tabBtns[i] = tb
+		local tf = Instance.new("Frame")
+		tf.Size = UDim2.new(1,-24,1,-94); tf.Position = UDim2.fromOffset(12,46)
+		tf.BackgroundTransparency = 1; tf.Visible = (i == 1); tf.Parent = invCard
+		tabFrames[i] = tf
+	end
+	-- (mkButton's hover tween restores BackgroundColor3, so the active
+	-- tab is marked via text colour instead.)
+	local function openTab(n: number)
+		for i = 1, 3 do
+			tabFrames[i].Visible = (i == n)
+			tabBtns[i].TextColor3 = (i == n) and C.gold or C.t2
+		end
+		if n == 1 and invUI.refreshStats then invUI.refreshStats() end
+		if n == 3 then Net.Event("GetNpcQuests"):FireServer() end
+	end
+	invUI.openTab = openTab
+	for i = 1, 3 do
+		local idx = i
+		tabBtns[i].MouseButton1Click:Connect(function() openTab(idx) end)
+	end
 
--- Slot definitions: label + position around the silhouette
-local SLOT_DEFS = {
-	{ slot="head",     icon="⛑️", name="Head",     pos=UDim2.new(0.5,-35,0,40) },
-	{ slot="necklace", icon="📿", name="Necklace", pos=UDim2.new(0.5,-35,0,90) },
-	{ slot="body",     icon="🥋", name="Body",     pos=UDim2.new(0,16,0,140) },
-	{ slot="weapon",   icon="⚔️", name="Weapon",   pos=UDim2.new(1,-76,0,140) },
-	{ slot="ring",     icon="💍", name="Ring",     pos=UDim2.new(1,-76,0,196) },
-	{ slot="legs",     icon="👖", name="Legs",     pos=UDim2.new(0,16,0,196) },
-	{ slot="feet",     icon="🥾", name="Feet",     pos=UDim2.new(0.5,-35,0,250) },
-}
-local slotFrames: { [string]: { frame: Frame, label: TextLabel } } = {}
-local equipState: { [string]: number? } = {}
+	local function sidePanel(parent: Instance, x: number, w: number): Frame
+		local f = Instance.new("Frame")
+		f.Size = UDim2.new(0,w,1,0); f.Position = UDim2.fromOffset(x,0)
+		f.BackgroundColor3 = C.bg3; f.BorderSizePixel = 0
+		corner(f,8); stroke(f,C.border); f.Parent = parent
+		return f
+	end
 
-local unequipRemote = Net.Event("UnequipItem")
-for _, def in ipairs(SLOT_DEFS) do
-	local sf = Instance.new("TextButton")
-	sf.Size = UDim2.fromOffset(60,60); sf.Position = def.pos
-	sf.BackgroundColor3 = C.bg4; sf.BorderSizePixel = 0; sf.AutoButtonColor = false
-	sf.Text = ""; corner(sf,8); stroke(sf,C.border); sf.Parent = dollPanel
-	local ic = mkLabel(sf, def.icon, UDim2.new(1,0,0,28), UDim2.fromOffset(0,6), C.t3, 20, nil, Enum.TextXAlignment.Center)
-	ic.TextYAlignment = Enum.TextYAlignment.Center
-	local nm = mkLabel(sf, def.name, UDim2.new(1,0,0,14), UDim2.fromOffset(0,40), C.t3, 9, nil, Enum.TextXAlignment.Center)
-	local thisSlot = def.slot
-	sf.MouseButton1Click:Connect(function()
-		if equipState[thisSlot] then unequipRemote:FireServer(thisSlot) end
-	end)
-	sf.MouseEnter:Connect(function() sf.BackgroundColor3 = C.bg5 end)
-	sf.MouseLeave:Connect(function() sf.BackgroundColor3 = C.bg4 end)
-	slotFrames[def.slot] = { frame = sf, label = nm }
-	_ = ic
-end
+	-- ════════ TAB 1 · CHARACTER ═══════════════════════════════
+	do
+		local t = tabFrames[1]
 
-local function rebuildEquipment(equipment: { [string]: number? })
-	for slot, data in pairs(slotFrames) do
-		local itemId = equipment[slot]
-		equipState[slot] = itemId
-		local item = itemId and ItemData.GetItem(itemId)
-		if item then
-			local rar = RARITY[item.rarity] or C.gold
-			data.frame.Text = item.icon
-			data.frame.TextColor3 = rar
-			data.frame.TextScaled = false
-			data.frame.Font = Enum.Font.GothamBold
-			data.frame.TextSize = 22
-			(data.frame :: any).TextYAlignment = Enum.TextYAlignment.Center
-			data.label.Text = item.name
-			data.label.TextColor3 = rar
-			local st = data.frame:FindFirstChildOfClass("UIStroke"); if st then st.Color = rar end
-		else
-			-- restore empty look
-			for _, def in ipairs(SLOT_DEFS) do
-				if def.slot == slot then
-					data.frame.Text = def.icon
-					data.frame.TextColor3 = C.t3
-					data.frame.TextSize = 20
-					data.label.Text = def.name
-					data.label.TextColor3 = C.t3
-					local st = data.frame:FindFirstChildOfClass("UIStroke"); if st then st.Color = C.border end
+		-- ── Left: Spirit Artifacts grid (3 × 8, level rows) ───
+		local artPanel = sidePanel(t, 0, 252)
+		mkLabel(artPanel,"SPIRIT ARTIFACTS",UDim2.new(1,-20,0,16),UDim2.fromOffset(12,8),C.t3,11,Enum.Font.GothamBold)
+		local ART_LEVELS = { 96, 84, 72, 60, 48, 36, 24, 12 }
+		for row = 1, 8 do
+			local y = 30 + (row - 1) * 49
+			local lv = mkLabel(artPanel, ("%d\nLVL"):format(ART_LEVELS[row]),
+				UDim2.fromOffset(34,44), UDim2.fromOffset(8,y), C.t3, 11, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+			lv.TextYAlignment = Enum.TextYAlignment.Center
+			for colI = 1, 3 do
+				local cell = Instance.new("TextLabel")
+				cell.Size = UDim2.fromOffset(44,44); cell.Position = UDim2.fromOffset(48 + (colI-1)*50, y)
+				cell.BackgroundColor3 = C.bg4; cell.BorderSizePixel = 0
+				cell.Text = "Empty"; cell.TextColor3 = C.t3; cell.TextSize = 9; cell.Font = Enum.Font.Gotham
+				corner(cell,6); stroke(cell,C.border); cell.Parent = artPanel
+			end
+		end
+
+		-- ── Centre: character paper doll ──────────────────────
+		local dollPanel = sidePanel(t, 260, 440)
+		local charBody = Instance.new("Frame")
+		charBody.Size = UDim2.fromOffset(96,210); charBody.Position = UDim2.new(0.5,0,0.5,4)
+		charBody.AnchorPoint = Vector2.new(0.5,0.5); charBody.BackgroundColor3 = C.bg5
+		charBody.BorderSizePixel = 0; corner(charBody,12); stroke(charBody, C.a1); charBody.Parent = dollPanel
+		mkLabel(charBody,"🧍",UDim2.fromScale(1,1),UDim2.fromOffset(0,0),C.t2,60,nil,Enum.TextXAlignment.Center).TextYAlignment = Enum.TextYAlignment.Center
+
+		-- Equipment slots around the silhouette (Body/Head/Necklace on
+		-- top, hands at the sides, legs/feet below — reference layout)
+		local SLOT_DEFS = {
+			{ slot="body",     icon="🥋", name="Body",     pos=UDim2.new(0.5,-142,0,16) },
+			{ slot="head",     icon="⛑️", name="Head",     pos=UDim2.new(0.5,-32,0,16)  },
+			{ slot="necklace", icon="📿", name="Necklace", pos=UDim2.new(0.5,78,0,16)   },
+			{ slot="weapon",   icon="⚔️", name="Weapon",   pos=UDim2.new(0,24,0.5,-32)  },
+			{ slot="ring",     icon="💍", name="Ring",     pos=UDim2.new(1,-88,0.5,-32) },
+			{ slot="legs",     icon="👖", name="Legs",     pos=UDim2.new(0.5,-102,1,-82) },
+			{ slot="feet",     icon="🥾", name="Feet",     pos=UDim2.new(0.5,38,1,-82)  },
+		}
+		local slotFrames: { [string]: { frame: TextButton, label: TextLabel } } = {}
+		local equipState: { [string]: number? } = {}
+
+		local unequipRemote = Net.Event("UnequipItem")
+		for _, def in ipairs(SLOT_DEFS) do
+			local sf = Instance.new("TextButton")
+			sf.Size = UDim2.fromOffset(64,64); sf.Position = def.pos
+			sf.BackgroundColor3 = C.bg4; sf.BorderSizePixel = 0; sf.AutoButtonColor = false
+			sf.Text = ""; corner(sf,8); stroke(sf,C.border); sf.Parent = dollPanel
+			local ic = mkLabel(sf, def.icon, UDim2.new(1,0,0,30), UDim2.fromOffset(0,6), C.t3, 20, nil, Enum.TextXAlignment.Center)
+			ic.TextYAlignment = Enum.TextYAlignment.Center
+			local nm = mkLabel(sf, def.name, UDim2.new(1,0,0,14), UDim2.fromOffset(0,44), C.t3, 9, nil, Enum.TextXAlignment.Center)
+			local thisSlot = def.slot
+			sf.MouseButton1Click:Connect(function()
+				if equipState[thisSlot] then unequipRemote:FireServer(thisSlot) end
+			end)
+			sf.MouseEnter:Connect(function() sf.BackgroundColor3 = C.bg5 end)
+			sf.MouseLeave:Connect(function() sf.BackgroundColor3 = C.bg4 end)
+			slotFrames[def.slot] = { frame = sf, label = nm }
+			_ = ic
+		end
+
+		function rebuildEquipment(equipment: { [string]: number? })
+			for slot, data in pairs(slotFrames) do
+				local itemId = equipment[slot]
+				equipState[slot] = itemId
+				local item = itemId and ItemData.GetItem(itemId)
+				if item then
+					local rar = RARITY[item.rarity] or C.gold
+					data.frame.Text = item.icon
+					data.frame.TextColor3 = rar
+					data.frame.TextScaled = false
+					data.frame.Font = Enum.Font.GothamBold
+					data.frame.TextSize = 22;
+					(data.frame :: any).TextYAlignment = Enum.TextYAlignment.Center
+					data.label.Text = item.name
+					data.label.TextColor3 = rar
+					local st = data.frame:FindFirstChildOfClass("UIStroke"); if st then st.Color = rar end
+				else
+					-- restore empty look
+					for _, def in ipairs(SLOT_DEFS) do
+						if def.slot == slot then
+							data.frame.Text = def.icon
+							data.frame.TextColor3 = C.t3
+							data.frame.TextSize = 20
+							data.label.Text = def.name
+							data.label.TextColor3 = C.t3
+							local st = data.frame:FindFirstChildOfClass("UIStroke"); if st then st.Color = C.border end
+						end
+					end
 				end
 			end
 		end
-	end
-end
 
--- ── Right: scrollable item list ─────────────────────────────
-local invList, _ = mkScrollList(invCard, UDim2.new(1,-336,1,-60), UDim2.fromOffset(324,50))
+		-- ── Right: Character Details / Build Stats ────────────
+		local statsPanel = sidePanel(t, 708, 248)
+		mkLabel(statsPanel,"CHARACTER DETAILS",UDim2.new(1,-20,0,16),UDim2.fromOffset(12,8),C.t3,11,Enum.Font.GothamBold)
+		invUI.cdName  = mkLabel(statsPanel,"—",UDim2.new(1,-20,0,20),UDim2.fromOffset(12,26),C.gold,15,Enum.Font.GothamBold)
+		invUI.cdRealm = mkLabel(statsPanel,"—",UDim2.new(1,-20,0,16),UDim2.fromOffset(12,48),C.t2,11)
+		invUI.cdAge   = mkLabel(statsPanel,"—",UDim2.new(1,-20,0,16),UDim2.fromOffset(12,66),C.green,11)
 
-local function rebuildInventory(inventory: {[any]: any})
-	for _, c in ipairs(invList:GetChildren()) do
-		if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end
-	end
+		mkLabel(statsPanel,"BUILD STATS",UDim2.new(1,-20,0,16),UDim2.fromOffset(12,94),C.t3,11,Enum.Font.GothamBold)
+		local STAT_ROWS = {
+			{ key="Health", icon="❤️", name="Health"        },
+			{ key="Qi",     icon="⚔️", name="Qi Power"      },
+			{ key="Def",    icon="🛡️", name="Defense"       },
+			{ key="Stones", icon="💰", name="Spirit Stones" },
+			{ key="Karma",  icon="⚖️", name="Karma"         },
+			{ key="Kills",  icon="☠️", name="Kills"         },
+		}
+		for i, def in ipairs(STAT_ROWS) do
+			local y = 112 + (i - 1) * 22
+			mkLabel(statsPanel, def.icon .. " " .. def.name, UDim2.new(0,140,0,16), UDim2.fromOffset(12,y), C.t2, 11)
+			invUI["stat" .. def.key] = mkLabel(statsPanel, "—", UDim2.new(1,-156,0,16), UDim2.fromOffset(144,y), C.t1, 11, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
+		end
 
-	local hasItems = false
-	for rawId, count in pairs(inventory) do
-		local itemId = tonumber(rawId)
-		if not itemId or count <= 0 then continue end
-		local item = ItemData.GetItem(itemId)
-		if not item then continue end
-		hasItems = true
+		mkLabel(statsPanel,"PROVIDENCE",UDim2.new(1,-20,0,16),UDim2.fromOffset(12,254),C.t3,11,Enum.Font.GothamBold)
+		invUI.provApt  = mkLabel(statsPanel,"🌟 —",UDim2.new(1,-20,0,15),UDim2.fromOffset(12,272),C.t1,10)
+		invUI.provPhys = mkLabel(statsPanel,"💪 —",UDim2.new(1,-20,0,15),UDim2.fromOffset(12,290),C.t1,10)
+		invUI.provConn = mkLabel(statsPanel,"🎭 —",UDim2.new(1,-20,0,15),UDim2.fromOffset(12,308),C.t1,10)
+		invUI.provDao  = mkLabel(statsPanel,"☯️ —",UDim2.new(1,-20,0,15),UDim2.fromOffset(12,326),C.t1,10)
 
-		local row = Instance.new("Frame")
-		row.Size = UDim2.new(1,0,0,52); row.BackgroundColor3 = C.bg3
-		row.BorderSizePixel = 0; corner(row, 6); stroke(row, C.border)
-		row.Parent = invList
-
-		local rarCol = RARITY[item.rarity] or C.t1
-		mkLabel(row, item.icon .. "  " .. item.name, UDim2.new(1,-110,0,20), UDim2.fromOffset(8,6), rarCol, 12, Enum.Font.GothamBold)
-		mkLabel(row, ("%s · ×%d"):format(item.rarity, count), UDim2.new(1,-110,0,16), UDim2.fromOffset(8,28), C.t3, 10)
-
-		local thisId = itemId
-		if ItemData.IsUsable(item) then
-			local useBtn = mkButton(row, "Use", UDim2.new(0,90,0,30), UDim2.new(1,-98,0.5,-15), C.green)
-			useBtn.TextSize = 12
-			useBtn.MouseButton1Click:Connect(function() Net.Event("UseItem"):FireServer(thisId) end)
-		elseif ItemData.IsEquippable(item) then
-			local eqBtn = mkButton(row, "Equip", UDim2.new(0,90,0,30), UDim2.new(1,-98,0.5,-15), C.a1)
-			eqBtn.TextSize = 12
-			eqBtn.MouseButton1Click:Connect(function() Net.Event("EquipItem"):FireServer(thisId) end)
-		else
-			mkLabel(row, item.itype, UDim2.new(0,90,0,20), UDim2.new(1,-98,0.5,-10), C.t3, 10, nil, Enum.TextXAlignment.Center)
+		invUI.refreshStats = function()
+			local function A(n: string) return player:GetAttribute(n) end
+			invUI.cdName.Text  = player.DisplayName
+			invUI.cdRealm.Text = ("%s · Stage %s/%s"):format(
+				tostring(A("RealmName") or "?"), tostring(A("Stage") or "?"), tostring(A("MaxStage") or "?"))
+			local lifespan = A("LifespanInfinite") and "∞" or tostring(math.floor((A("MaxLifespan") or 0) :: number))
+			invUI.cdAge.Text = ("⏳ Age %d / %s"):format(math.floor((A("Age") or 0) :: number), lifespan)
+			invUI.statHealth.Text = fmt(A("HP") :: number?) .. " / " .. fmt(A("MaxHP") :: number?)
+			invUI.statQi.Text     = fmt(A("ATK") :: number?)
+			invUI.statDef.Text    = fmt(A("Defense") :: number?)
+			invUI.statStones.Text = fmt(A("SpiritStones") :: number?)
+			invUI.statKarma.Text  = fmt(A("Karma") :: number?)
+			invUI.statKills.Text  = fmt(A("TotalKills") :: number?)
+			invUI.provApt.Text  = "🌟 " .. tostring(A("Aptitude") or "—")
+			invUI.provPhys.Text = "💪 " .. tostring(A("Physique") or "—")
+			invUI.provConn.Text = "🎭 " .. tostring(A("Connate") or "—")
+			invUI.provDao.Text  = "☯️ " .. tostring(A("DaoAffinity") or "—") .. " Dao"
 		end
 	end
 
-	if not hasItems then
-		local empty = Instance.new("TextLabel")
-		empty.Size = UDim2.new(1,0,0,40); empty.BackgroundTransparency = 1
-		empty.Text = "— Inventory empty —"; empty.TextColor3 = C.t3
-		empty.TextSize = 13; empty.Font = Enum.Font.Gotham
-		empty.TextXAlignment = Enum.TextXAlignment.Center
-		empty.Parent = invList
+	-- ════════ TAB 2 · INVENTORY (item list + filters) ═════════
+	local setInvFilter: (string) -> ()
+	do
+		local t = tabFrames[2]
+		local filterBtns: { [string]: TextButton } = {}
+		local FILTERS = { {"all","All"}, {"misc","Misc"}, {"use","Utility"} }
+		for i, f in ipairs(FILTERS) do
+			local fb = mkButton(t, f[2], UDim2.new(0,90,0,26), UDim2.fromOffset((i-1)*96, 0), C.bg4)
+			fb.TextSize = 12
+			filterBtns[f[1]] = fb
+		end
+
+		local invList, _ = mkScrollList(t, UDim2.new(1,0,1,-34), UDim2.fromOffset(0,32))
+		local invFilter = "all"
+		local lastInventory: { [any]: any } = {}
+
+		function rebuildInventory(inventory: {[any]: any})
+			lastInventory = inventory
+			for _, c in ipairs(invList:GetChildren()) do
+				if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end
+			end
+
+			local hasItems = false
+			for rawId, count in pairs(inventory) do
+				local itemId = tonumber(rawId)
+				if not itemId or count <= 0 then continue end
+				local item = ItemData.GetItem(itemId)
+				if not item then continue end
+				if invFilter == "use" and not ItemData.IsUsable(item) then continue end
+				if invFilter == "misc" and ItemData.IsUsable(item) then continue end
+				hasItems = true
+
+				local row = Instance.new("Frame")
+				row.Size = UDim2.new(1,0,0,52); row.BackgroundColor3 = C.bg3
+				row.BorderSizePixel = 0; corner(row, 6); stroke(row, C.border)
+				row.Parent = invList
+
+				local rarCol = RARITY[item.rarity] or C.t1
+				mkLabel(row, item.icon .. "  " .. item.name, UDim2.new(1,-110,0,20), UDim2.fromOffset(8,6), rarCol, 12, Enum.Font.GothamBold)
+				mkLabel(row, ("%s · ×%d"):format(item.rarity, count), UDim2.new(1,-110,0,16), UDim2.fromOffset(8,28), C.t3, 10)
+
+				local thisId = itemId
+				if ItemData.IsUsable(item) then
+					local useBtn = mkButton(row, "Use", UDim2.new(0,90,0,30), UDim2.new(1,-98,0.5,-15), C.green)
+					useBtn.TextSize = 12
+					useBtn.MouseButton1Click:Connect(function() Net.Event("UseItem"):FireServer(thisId) end)
+				elseif ItemData.IsEquippable(item) then
+					local eqBtn = mkButton(row, "Equip", UDim2.new(0,90,0,30), UDim2.new(1,-98,0.5,-15), C.a1)
+					eqBtn.TextSize = 12
+					eqBtn.MouseButton1Click:Connect(function() Net.Event("EquipItem"):FireServer(thisId) end)
+				else
+					mkLabel(row, item.itype, UDim2.new(0,90,0,20), UDim2.new(1,-98,0.5,-10), C.t3, 10, nil, Enum.TextXAlignment.Center)
+				end
+			end
+
+			if not hasItems then
+				local empty = Instance.new("TextLabel")
+				empty.Size = UDim2.new(1,0,0,40); empty.BackgroundTransparency = 1
+				empty.Text = "— No items —"; empty.TextColor3 = C.t3
+				empty.TextSize = 13; empty.Font = Enum.Font.Gotham
+				empty.TextXAlignment = Enum.TextXAlignment.Center
+				empty.Parent = invList
+			end
+		end
+
+		function setInvFilter(f: string)
+			invFilter = f
+			for key, fb in pairs(filterBtns) do
+				fb.TextColor3 = (key == f) and C.gold or C.t2
+			end
+			rebuildInventory(lastInventory)
+		end
+		for _, f in ipairs(FILTERS) do
+			local key = f[1]
+			filterBtns[key].MouseButton1Click:Connect(function() setInvFilter(key) end)
+		end
+		setInvFilter("all")
 	end
+
+	-- ════════ TAB 3 · QUEST LOG (NPC chains, max 3 active) ════
+	do
+		local t = tabFrames[3]
+		invUI.npcActive, invUI.npcCompleted, invUI.npcAvail = {}, {}, {}
+
+		invUI.npcHeader = mkLabel(t, "ACTIVE QUESTS (0/3)", UDim2.new(0,300,0,18), UDim2.fromOffset(0,4), C.gold, 13, Enum.Font.GothamBold)
+		local realmQBtn = mkButton(t, "📜 Realm Quests →", UDim2.new(0,150,0,26), UDim2.new(1,-150,0,0), C.bg4)
+		realmQBtn.TextSize = 11
+		realmQBtn.MouseButton1Click:Connect(function()
+			if invUI.openRealmQuests then invUI.openRealmQuests() end
+		end)
+
+		local questScroll, _ = mkScrollList(t, UDim2.new(1,0,1,-34), UDim2.fromOffset(0,30))
+
+		invUI.rebuildQuestLog = function()
+			for _, c in ipairs(questScroll:GetChildren()) do
+				if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end
+			end
+			local active    = invUI.npcActive or {}
+			local avail     = invUI.npcAvail or {}
+			local completed = invUI.npcCompleted or {}
+			invUI.npcHeader.Text = ("ACTIVE QUESTS (%d/3)"):format(#active)
+			local order = 0
+
+			local function section(title: string, col: Color3)
+				order += 1
+				local s = Instance.new("TextLabel")
+				s.LayoutOrder = order; s.Size = UDim2.new(1,0,0,22); s.BackgroundTransparency = 1
+				s.Text = title; s.TextColor3 = col; s.TextSize = 10; s.Font = Enum.Font.GothamBold
+				s.TextXAlignment = Enum.TextXAlignment.Left; s.Parent = questScroll
+			end
+
+			if #active > 0 then
+				for _, aq in ipairs(active) do
+					local q = QuestData.NPC_ALL[aq.id]
+					if q then
+						order += 1
+						local row = Instance.new("Frame"); row.LayoutOrder = order
+						row.Size = UDim2.new(1,0,0,72); row.BackgroundColor3 = Color3.fromHex("0D1F16")
+						row.BorderSizePixel = 0; corner(row,6); stroke(row,C.green); row.Parent = questScroll
+						mkLabel(row, ("%s %s"):format(q.icon, q.title), UDim2.new(1,-130,0,18), UDim2.fromOffset(10,5), C.t1, 13, Enum.Font.GothamBold)
+						mkLabel(row, "from " .. q.giver .. ("  ·  Step %d"):format(q.step), UDim2.new(1,-130,0,12), UDim2.fromOffset(10,24), C.t3, 9)
+						local obj = q.objectives[1]
+						local objTxt = obj and obj.desc or ""
+						if obj and obj.count and (obj.type == "kill" or obj.type == "kill_realm") then
+							local prog = (aq.progress and aq.progress.kills) or 0
+							objTxt = ("%s  —  %d/%d"):format(objTxt, math.min(prog, obj.count), obj.count)
+						end
+						mkLabel(row, objTxt, UDim2.new(1,-130,0,14), UDim2.fromOffset(10,40), C.t2, 10)
+						mkLabel(row, ("→ +%s EXP · 💰%s"):format(fmt(q.rewards.exp or 0), fmt(q.rewards.stones or 0)),
+							UDim2.new(1,-130,0,12), UDim2.fromOffset(10,56), C.gold, 9)
+						local ab = mkButton(row, "Abandon", UDim2.new(0,100,0,28), UDim2.new(1,-110,0.5,-14), C.bg5)
+						ab.TextSize = 11
+						local qid = q.id
+						ab.MouseButton1Click:Connect(function() Net.Event("AbandonNpcQuest"):FireServer(qid) end)
+					end
+				end
+			else
+				section("— No active quests. Accept up to 3 below. —", C.t3)
+			end
+
+			section("AVAILABLE FROM NPCS", C.a1)
+			local anyAvail = false
+			for _, q in ipairs(avail) do
+				anyAvail = true
+				order += 1
+				local row = Instance.new("Frame"); row.LayoutOrder = order
+				row.Size = UDim2.new(1,0,0,72); row.BackgroundColor3 = C.bg3
+				row.BorderSizePixel = 0; corner(row,6); stroke(row,C.border); row.Parent = questScroll
+				mkLabel(row, ("%s %s"):format(q.icon, q.title), UDim2.new(1,-130,0,18), UDim2.fromOffset(10,5), C.t1, 13, Enum.Font.GothamBold)
+				mkLabel(row, "from " .. q.giver .. ("  ·  Step %d"):format(q.step), UDim2.new(1,-130,0,12), UDim2.fromOffset(10,24), C.t3, 9)
+				mkLabel(row, q.desc, UDim2.new(1,-130,0,26), UDim2.fromOffset(10,38), C.t2, 9).TextWrapped = true
+				local full = #active >= 3
+				local ac = mkButton(row, full and "Full (3/3)" or "Accept", UDim2.new(0,100,0,28), UDim2.new(1,-110,0.5,-14), full and C.bg5 or C.a1)
+				ac.TextSize = 11
+				local qid = q.id
+				ac.MouseButton1Click:Connect(function() Net.Event("AcceptNpcQuest"):FireServer(qid) end)
+			end
+			if not anyAvail then
+				section(#completed > 0 and "— All NPC quest chains completed! —" or "— Talk to the village NPCs… —", C.t3)
+			end
+			if #completed > 0 then
+				section(("COMPLETED: %d"):format(#completed), C.t3)
+			end
+		end
+	end
+
+	-- ── Bottom bar: Hide Hair · Misc · Utility ────────────────
+	do
+		local bar = Instance.new("Frame")
+		bar.Size = UDim2.new(1,-24,0,34); bar.Position = UDim2.new(0,12,1,-42)
+		bar.BackgroundColor3 = C.bg3; bar.BorderSizePixel = 0
+		corner(bar,8); stroke(bar,C.border); bar.Parent = invCard
+
+		local hairHidden = false
+		local hairBtn = mkButton(bar, "☐ Hide Hair", UDim2.new(0,120,0,26), UDim2.fromOffset(6,4), C.bg4)
+		hairBtn.TextSize = 11
+		hairBtn.MouseButton1Click:Connect(function()
+			hairHidden = not hairHidden
+			hairBtn.Text = (hairHidden and "☑" or "☐") .. " Hide Hair"
+			local char = player.Character
+			if not char then return end
+			for _, acc in ipairs(char:GetChildren()) do
+				if acc:IsA("Accessory") and acc.AccessoryType == Enum.AccessoryType.Hair then
+					local handle = acc:FindFirstChild("Handle")
+					if handle and handle:IsA("BasePart") then
+						handle.Transparency = hairHidden and 1 or 0
+					end
+				end
+			end
+		end)
+
+		local miscBtn = mkButton(bar, "Misc", UDim2.new(0,90,0,26), UDim2.fromOffset(132,4), C.bg4)
+		miscBtn.TextSize = 11
+		miscBtn.MouseButton1Click:Connect(function() openTab(2); setInvFilter("misc") end)
+		local utilBtn = mkButton(bar, "Utility", UDim2.new(0,90,0,26), UDim2.fromOffset(228,4), C.bg4)
+		utilBtn.TextSize = 11
+		utilBtn.MouseButton1Click:Connect(function() openTab(2); setInvFilter("use") end)
+	end
+
+	openTab(1)
 end
 
 Net.Event("EquipmentSync").OnClientEvent:Connect(function(equipment: any)
 	rebuildEquipment(equipment)
+end)
+
+Net.Event("NpcQuestList").OnClientEvent:Connect(function(active: any, completed: any)
+	invUI.npcActive    = active or {}
+	invUI.npcCompleted = completed or {}
+	invUI.rebuildQuestLog()
+end)
+
+Net.Event("NpcAvailableQuests").OnClientEvent:Connect(function(avail: any)
+	invUI.npcAvail = avail or {}
+	invUI.rebuildQuestLog()
 end)
 
 -- ════════════════════════════════════════════════════════════
@@ -645,6 +919,14 @@ Net.Event("QuestSync").OnClientEvent:Connect(function(syncData: any)
 		rebuildQuests()
 	end
 end)
+
+-- Lets the inventory's Quest Log tab jump to the realm-quest overlay
+-- (rebuildQuests isn't in scope inside the inventory do..end block).
+invUI.openRealmQuests = function()
+	closeAllOverlays()
+	rebuildQuests()
+	questLayer.Visible = true
+end
 
 -- ════════════════════════════════════════════════════════════
 -- ── Sect overlay
@@ -1485,7 +1767,11 @@ end
 mainMenuBtn.MouseButton1Click:Connect(function() closeAllOverlays(); mainMenuLayer.Visible = true end)
 closeMainMenu.MouseButton1Click:Connect(function() mainMenuLayer.Visible = false end)
 
-invBtn.MouseButton1Click:Connect(function() closeAllOverlays(); inventoryLayer.Visible = true end)
+invBtn.MouseButton1Click:Connect(function()
+	closeAllOverlays()
+	inventoryLayer.Visible = true
+	invUI.openTab(1)
+end)
 closeInv.MouseButton1Click:Connect(function() inventoryLayer.Visible = false end)
 
 shopBtn.MouseButton1Click:Connect(function() closeAllOverlays(); rebuildShop(); shopLayer.Visible = true end)
@@ -1495,10 +1781,12 @@ player:GetAttributeChangedSignal("Realm"):Connect(function()
 	if shopLayer.Visible then rebuildShop() end
 end)
 
+-- The HUD quest button opens the Quest Log tab (NPC chains); the realm
+-- quest overlay stays reachable via the hub menu / "Realm Quests →".
 questBtn.MouseButton1Click:Connect(function()
 	closeAllOverlays()
-	questLayer.Visible = true
-	rebuildQuests()
+	inventoryLayer.Visible = true
+	invUI.openTab(3)
 end)
 closeQuest.MouseButton1Click:Connect(function() questLayer.Visible = false end)
 

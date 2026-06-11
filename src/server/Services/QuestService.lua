@@ -219,6 +219,12 @@ end
 
 -- ── Start ────────────────────────────────────────────────────
 function QuestService.Start()
+	-- Create client-bound remotes eagerly: the client's Net.Event() blocks in
+	-- WaitForChild, so they must exist before any UIController references them.
+	Net.Event("NpcQuestList")
+	Net.Event("NpcAvailableQuests")
+	Net.Event("NpcQuestCompleted")
+
 	-- Realm-based quest claim
 	Net.Event("ClaimQuest").OnServerEvent:Connect(function(player, questId)
 		QuestService.Claim(player, questId)

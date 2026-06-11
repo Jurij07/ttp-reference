@@ -68,8 +68,12 @@ local function defaultProfile(): any
 		-- NPC quest chains: sequential quests from hub NPCs (max 3 active)
 		npcQuests              = { active = {}, completed = {} },
 		-- Idle layer
-		lastSeenAt             = 0,   -- os.time() der letzten Aktivität (Offline-Fortschritt)
-		idleHuntRealm          = 0,   -- aktive Auto-Hunt-Zone (0 = aus)
+		lastSeenAt             = 0,
+		idleHuntRealm          = 0,
+		-- Permanent idle upgrades
+		enhancements           = {},   -- { [id] = level }
+		-- Daily missions
+		daily                  = {},   -- { day, tasks, progress, claimed }
 	}
 end
 
@@ -111,6 +115,8 @@ local function reconcile(profile: any)
 	if type(profile.pvpEnabled) ~= "boolean" then profile.pvpEnabled = false end
 	if type(profile.lastSeenAt) ~= "number" then profile.lastSeenAt = 0 end
 	if type(profile.idleHuntRealm) ~= "number" then profile.idleHuntRealm = 0 end
+	if type(profile.enhancements) ~= "table" then profile.enhancements = {} end
+	if type(profile.daily) ~= "table" then profile.daily = {} end
 end
 
 local function keyFor(userId: number): string

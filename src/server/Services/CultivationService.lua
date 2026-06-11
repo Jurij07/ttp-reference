@@ -281,9 +281,10 @@ function CultivationService.AddStones(player: Player, amount: number)
 	profile.spiritStones = (profile.spiritStones or 0) + amount
 	if amount > 0 then
 		profile.lifetimeStones = (profile.lifetimeStones or 0) + amount
-		-- NPC quest progression: "earn X lifetime stones" objectives
 		local QuestService = require(script.Parent.QuestService)
 		QuestService.OnStonesChanged(player, profile.lifetimeStones)
+		local ok, DS = pcall(require, script.Parent.DailyService)
+		if ok then (DS :: any).OnStonesEarned(player, amount) end
 	end
 	player:SetAttribute("SpiritStones", profile.spiritStones)
 end

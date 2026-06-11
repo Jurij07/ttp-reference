@@ -24,6 +24,8 @@ local LeaderboardService = require(script.Parent.Services.LeaderboardService)
 local RobuxService       = require(script.Parent.Services.RobuxService)
 local NPCService         = require(script.Parent.Services.NPCService)
 local IdleService        = require(script.Parent.Services.IdleService)
+local EnhancementService = require(script.Parent.Services.EnhancementService)
+local DailyService       = require(script.Parent.Services.DailyService)
 
 -- World systems (R1–R26 world concept)
 local WorldTransitionService          = require(script.Parent.Services.WorldTransitionService)
@@ -60,6 +62,8 @@ LeaderboardService.Start()
 RobuxService.Start()
 NPCService.Start()
 IdleService.Start()
+EnhancementService.Start()
+DailyService.Start()
 
 -- World systems
 WorldTransitionService.Start()

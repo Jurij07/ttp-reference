@@ -406,30 +406,29 @@ do
 	closeInv = mkButton(invCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,8),C.bg5)
 
 	-- ── Tab bar ───────────────────────────────────────────────
-	local TAB_NAMES = { "⚔️ Character", "🎒 Inventory", "📜 Quest Log" }
+	local TAB_NAMES = { "⚔️ Character", "🎒 Inventory", "📜 Quest Log", "🗓️ Daily" }
 	local tabBtns: { TextButton } = {}
 	local tabFrames: { Frame } = {}
-	for i = 1, 3 do
-		local tb = mkButton(invCard, TAB_NAMES[i], UDim2.new(0,150,0,30), UDim2.fromOffset(12 + (i-1)*156, 8), C.bg4)
-		tb.TextSize = 13
+	for i = 1, 4 do
+		local tb = mkButton(invCard, TAB_NAMES[i], UDim2.new(0,138,0,30), UDim2.fromOffset(12 + (i-1)*144, 8), C.bg4)
+		tb.TextSize = 12
 		tabBtns[i] = tb
 		local tf = Instance.new("Frame")
 		tf.Size = UDim2.new(1,-24,1,-94); tf.Position = UDim2.fromOffset(12,46)
 		tf.BackgroundTransparency = 1; tf.Visible = (i == 1); tf.Parent = invCard
 		tabFrames[i] = tf
 	end
-	-- (mkButton's hover tween restores BackgroundColor3, so the active
-	-- tab is marked via text colour instead.)
 	local function openTab(n: number)
-		for i = 1, 3 do
+		for i = 1, 4 do
 			tabFrames[i].Visible = (i == n)
 			tabBtns[i].TextColor3 = (i == n) and C.gold or C.t2
 		end
 		if n == 1 and invUI.refreshStats then invUI.refreshStats() end
 		if n == 3 then Net.Event("GetNpcQuests"):FireServer() end
+		if n == 4 then Net.Event("GetDailyTasks"):FireServer() end
 	end
 	invUI.openTab = openTab
-	for i = 1, 3 do
+	for i = 1, 4 do
 		local idx = i
 		tabBtns[i].MouseButton1Click:Connect(function() openTab(idx) end)
 	end
@@ -751,6 +750,57 @@ do
 		end
 	end
 
+	-- ════════ TAB 4 · DAILY MISSIONS ═════════════════════════════
+	do
+		local t4 = tabFrames[4]
+		local resetL = mkLabel(t4,"🗓️  Daily Missions — reset at midnight UTC",
+			UDim2.new(1,0,0,16),UDim2.fromOffset(0,0),C.gold,15,Enum.Font.GothamBold)
+		resetL.TextXAlignment = Enum.TextXAlignment.Center
+		local dailySF, _ = mkScrollList(t4, UDim2.new(1,0,1,-22), UDim2.fromOffset(0,22))
+
+		local function rebuildDaily(tasks: any)
+			for _, ch in ipairs(dailySF:GetChildren()) do
+				if ch:IsA("Frame") then ch:Destroy() end
+			end
+			if type(tasks) ~= "table" or #tasks == 0 then
+				local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1,0,0,40)
+				lbl.BackgroundTransparency = 1; lbl.Text = "Loading daily tasks…"
+				lbl.TextColor3 = C.t3; lbl.TextSize = 13; lbl.Font = Enum.Font.Gotham
+				lbl.Parent = dailySF; return
+			end
+			for _, task_ in ipairs(tasks) do
+				local done = (tonumber(task_.progress) or 0) >= (tonumber(task_.target) or 1)
+				local claimed = task_.claimed == true
+				local row = Instance.new("Frame")
+				row.Size = UDim2.new(1,-8,0,72); row.BackgroundColor3 = C.bg3
+				corner(row,8); stroke(row, claimed and C.t3 or (done and C.green or C.border)); row.Parent = dailySF
+				mkLabel(row, ("%s  %s"):format(task_.icon or "☯️", task_.title or "?"),
+					UDim2.new(1,-140,0,18),UDim2.fromOffset(12,8),claimed and C.t3 or C.t1,14,Enum.Font.GothamBold)
+				local prog = math.min(tonumber(task_.progress) or 0, tonumber(task_.target) or 1)
+				local targ = tonumber(task_.target) or 1
+				local progFill = mkBar(row, done and C.green or C.a1, UDim2.new(0,12,0,32), 8)
+				progFill.Parent.Size = UDim2.new(1,-160,0,8); progFill.Parent.Position = UDim2.fromOffset(12,32)
+				progFill.Size = UDim2.fromScale(prog / math.max(targ,1), 1)
+				mkLabel(row, ("%s / %s"):format(fmt(prog), fmt(targ)),
+					UDim2.new(0,120,0,14),UDim2.fromOffset(12,44),C.t2,11)
+				local rewStr = ""
+				if (task_.rewardStones or 0) > 0 then rewStr ..= ("💰%s "):format(fmt(task_.rewardStones)) end
+				if (task_.rewardExp    or 0) > 0 then rewStr ..= ("☯️%s EXP"):format(fmt(task_.rewardExp)) end
+				mkLabel(row, rewStr, UDim2.new(0,120,0,14),UDim2.fromOffset(12,58),C.gold,11)
+				if claimed then
+					mkLabel(row,"✓ Claimed",UDim2.new(0,110,0,30),UDim2.new(1,-122,0,22),C.t3,13,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+				elseif done then
+					local qid = task_.id
+					local btn = mkButton(row,"✨ Claim",UDim2.new(0,110,0,34),UDim2.new(1,-122,0,19),C.green)
+					btn.MouseButton1Click:Connect(function() Net.Event("ClaimDailyTask"):FireServer(qid) end)
+				else
+					mkLabel(row,"⋯ In progress",UDim2.new(0,110,0,30),UDim2.new(1,-122,0,22),C.t3,11,nil,Enum.TextXAlignment.Center)
+				end
+			end
+		end
+		invUI.rebuildDaily = rebuildDaily
+	end
+
 	-- ── Bottom bar: Hide Hair · Misc · Utility ────────────────
 	do
 		local bar = Instance.new("Frame")
@@ -800,6 +850,10 @@ end)
 Net.Event("NpcAvailableQuests").OnClientEvent:Connect(function(avail: any)
 	invUI.npcAvail = avail or {}
 	invUI.rebuildQuestLog()
+end)
+
+Net.Event("DailySync").OnClientEvent:Connect(function(tasks: any)
+	if invUI.rebuildDaily then invUI.rebuildDaily(tasks) end
 end)
 
 -- ════════════════════════════════════════════════════════════
@@ -1763,6 +1817,7 @@ function closeAllOverlays()
 	titleLayer.Visible = false;     dungeonLayer.Visible = false
 	leaderLayer.Visible = false;    bookLayer.Visible = false
 	storeLayer.Visible = false;     huntLayer.Visible = false
+	enhLayer.Visible = false
 end
 
 mainMenuBtn.MouseButton1Click:Connect(function() closeAllOverlays(); mainMenuLayer.Visible = true end)
@@ -1962,6 +2017,93 @@ do
 end
 
 -- ════════════════════════════════════════════════════════════
+-- ── Enhancement overlay (Spirit Cave / Stone Vein / Swift Hunt)
+-- ════════════════════════════════════════════════════════════
+local enhLayer = mkOverlay("EnhLayer")
+do
+	local EnhancementData = require(GameData:WaitForChild("EnhancementData"))
+	local enhLevels: { [string]: number } = {}
+
+	local enhCard = mkPanel("EnhCard", UDim2.new(0,500,0,520), UDim2.fromScale(0.5,0.5), Vector2.new(0.5,0.5), enhLayer)
+	mkLabel(enhCard,"⚡ CULTIVATION ENHANCEMENTS",UDim2.new(1,-50,0,24),UDim2.fromOffset(16,14),C.gold,18,Enum.Font.GothamBold)
+	mkLabel(enhCard,"Permanent upgrades to your passive cultivation.",UDim2.new(1,-32,0,16),UDim2.fromOffset(16,42),C.t2,12)
+	local closeEnh = mkButton(enhCard,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,10),C.bg5)
+	local enhStoneL = mkLabel(enhCard,"💰 —",UDim2.new(0,160,0,18),UDim2.new(1,-176,0,44),C.gold,13,Enum.Font.GothamBold,Enum.TextXAlignment.Right)
+	local enhRows: { Frame } = {}
+
+	local function rebuildEnh()
+		for _, row in ipairs(enhRows) do row:Destroy() end
+		table.clear(enhRows)
+		local stones = (player:GetAttribute("SpiritStones") or 0) :: number
+		enhStoneL.Text = ("💰 %s"):format(fmt(stones))
+		for idx, upg in ipairs(EnhancementData.UPGRADES) do
+			local lvl = (enhLevels[upg.id] or 0) :: number
+			local row = Instance.new("Frame")
+			row.Size = UDim2.new(1,-24,0,110); row.Position = UDim2.fromOffset(12, 72 + (idx-1)*118)
+			row.BackgroundColor3 = C.bg3; row.BorderSizePixel = 0
+			corner(row,10); stroke(row,C.border); row.Parent = enhCard
+			table.insert(enhRows, row)
+
+			mkLabel(row, ("%s  %s   Lv %d / %d"):format(upg.icon, upg.name, lvl, upg.maxLevel),
+				UDim2.new(1,-170,0,20),UDim2.fromOffset(14,10),C.t1,15,Enum.Font.GothamBold)
+			local descL = mkLabel(row, upg.desc, UDim2.new(1,-170,0,32),UDim2.fromOffset(14,34),C.t2,11)
+			descL.TextWrapped = true
+
+			-- Progress bar
+			local barBg = Instance.new("Frame")
+			barBg.Size = UDim2.new(1,-170,0,8); barBg.Position = UDim2.fromOffset(14,72)
+			barBg.BackgroundColor3 = C.bg4; barBg.BorderSizePixel = 0; corner(barBg,4); barBg.Parent = row
+			local barFill = Instance.new("Frame")
+			barFill.Size = UDim2.fromScale(lvl / math.max(upg.maxLevel,1), 1)
+			barFill.BackgroundColor3 = C.a1; barFill.BorderSizePixel = 0; corner(barFill,4); barFill.Parent = barBg
+
+			local mult = EnhancementData.Mult(upg, lvl)
+			local multL = mkLabel(row, ("%s%.0f×"):format("Effect: ", mult),
+				UDim2.new(1,-170,0,16),UDim2.fromOffset(14,84),C.cyan,11)
+			if upg.huntBonus then
+				multL.Text = ("Hunt tick: %.1fs"):format(EnhancementData.HuntTick(lvl))
+			end
+
+			if lvl >= upg.maxLevel then
+				mkLabel(row,"✦ MAX",UDim2.new(0,140,0,44),UDim2.new(1,-154,0,34),C.gold,16,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+			else
+				local cost = EnhancementData.NextCost(upg, lvl)
+				local canAfford = stones >= cost
+				local btn = mkButton(row, ("⬆ Upgrade\n💰 %s"):format(fmt(cost)),
+					UDim2.new(0,140,0,72), UDim2.new(1,-154,0,18),
+					canAfford and C.a1 or C.bg4)
+				btn.TextSize = 12
+				local uid = upg.id
+				btn.MouseButton1Click:Connect(function()
+					Net.Event("BuyEnhancement"):FireServer(uid)
+				end)
+			end
+		end
+	end
+
+	Net.Event("EnhancementSync").OnClientEvent:Connect(function(levels: any)
+		if type(levels) == "table" then
+			for k, v in pairs(levels) do enhLevels[k] = v end
+		end
+		if enhLayer.Visible then rebuildEnh() end
+	end)
+	player:GetAttributeChangedSignal("SpiritStones"):Connect(function()
+		if enhLayer.Visible then rebuildEnh() end
+	end)
+	closeEnh.MouseButton1Click:Connect(function() enhLayer.Visible = false end)
+
+	-- Expose opener for the hub menu
+	local enhBtn = mkButton(hudRoot,"⚡",UDim2.new(0,46,0,46),UDim2.new(1,-322,1,-14),C.bg4,Vector2.new(1,1))
+	enhBtn.MouseButton1Click:Connect(function()
+		closeAllOverlays(); rebuildEnh(); enhLayer.Visible = true
+	end)
+	-- Hub menu shortcut
+	hubButtons.enhancements = mkButton(mainMenuLayer,"⚡ Enhancements",
+		UDim2.new(0,160,0,44), UDim2.fromOffset(0,0), C.bg4)  -- placeholder; real position set by hubBtn()
+	hubButtons.enhancements.Visible = false  -- hidden duplicate; button is the HUD btn above
+end
+
+-- ════════════════════════════════════════════════════════════
 -- ── Keyboard shortcuts
 -- ════════════════════════════════════════════════════════════
 local useTechRemote = Net.Event("UseTechnique")
@@ -1973,7 +2115,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible
 			or sectLayer.Visible or worldLayer.Visible or companionLayer.Visible or formationLayer.Visible
 			or titleLayer.Visible or dungeonLayer.Visible or leaderLayer.Visible or bookLayer.Visible
-			or storeLayer.Visible or huntLayer.Visible then
+			or storeLayer.Visible or huntLayer.Visible or enhLayer.Visible then
 			closeAllOverlays()
 		elseif seclPopup.Visible then
 			seclPopup.Visible = false

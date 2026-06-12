@@ -191,7 +191,7 @@ local w1 = Instance.new("Folder"); w1.Name = "World1_MortalEarth"; w1.Parent = w
 -- zone (ring of 9). The walkable tops sit exactly at Y1, where the old flat
 -- ground used to be, so every structure/NPC position stays valid.
 makeIsland(WorldData.HUB_CENTER.X, Y1 - 4, WorldData.HUB_CENTER.Z, 512, TM.Grass, TM.Rock)
-for _, islandRealmId in ipairs(WorldData.Realms()) do
+for _, islandRealmId in ipairs(WorldData.RealmsInWorld(1)) do
 	local zc = WorldData.ZoneCenter(islandRealmId)
 	makeIsland(zc.X, Y1 - 4, zc.Z, 512, TM.Grass, TM.Rock)
 end
@@ -312,7 +312,7 @@ end
 local zr = WorldData.ZONE_RADIUS
 local zh = WorldData.ZONE_HEIGHT
 
-for _, realmId in ipairs(WorldData.Realms()) do
+for _, realmId in ipairs(WorldData.RealmsInWorld(1)) do
 	local center = WorldData.ZoneCenter(realmId)
 	local realm  = CultivationData.GetRealm(realmId)
 	local biome  = biomeFor(realmId)
@@ -654,7 +654,7 @@ end
 
 portalArch(w2, "Portal_W2_to_W1", Vector3.new(av.X - 60, Y2 + 3, av.Z), Color3.fromRGB(120, 200, 120), "↓ Mortal Earth")
 portalArch(w2, "Portal_W2_to_W3", Vector3.new(av.X + 60, Y2 + 3, av.Z), Color3.fromRGB(180, 100, 255), "↑ Sage Heaven (R16)")
-billboard(w2, Vector3.new(0, Y2 + 140, 0), "✦ IMMORTAL SKY", Color3.fromRGB(100, 255, 200), "Realm 10 — 16", Color3.fromRGB(255, 255, 255))
+billboard(w2, Vector3.new(0, Y2 + 140, 0), "✦ IMMORTAL SKY", Color3.fromRGB(100, 255, 200), "Realm 10 — 15", Color3.fromRGB(255, 255, 255))
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- WORLD 3 — SAGE HEAVEN  (Y = 3600)
@@ -748,7 +748,7 @@ end
 cyl("W3ArrivalPad", 40, 6, Vector3.new(WorldData.WORLD_ARRIVAL[3].X, Y3 + 9, WorldData.WORLD_ARRIVAL[3].Z), Color3.fromRGB(120, 80, 160), Enum.Material.Marble, w3)
 portalArch(w3, "Portal_W3_to_W2", Vector3.new(-240, Y3 + 6, 0), Color3.fromRGB(120, 200, 120), "↓ Immortal Sky")
 portalArch(w3, "Portal_W3_to_W4", Vector3.new(240, Y3 + 6, 0), Color3.fromRGB(255, 60, 60), "↑ Primal Chaos (R23)")
-billboard(w3, Vector3.new(0, Y3 + 200, 0), "⋆ SAGE HEAVEN", Color3.fromRGB(200, 100, 255), "Realm 17 — 23", Color3.fromRGB(255, 255, 255))
+billboard(w3, Vector3.new(0, Y3 + 200, 0), "⋆ SAGE HEAVEN", Color3.fromRGB(200, 100, 255), "Realm 16 — 22", Color3.fromRGB(255, 255, 255))
 
 -- ══════════════════════════════════════════════════════════════════════════════
 -- WORLD 4 — PRIMAL CHAOS  (Y = 5400)
@@ -848,7 +848,51 @@ do
 end
 
 portalArch(w4, "Portal_W4_to_W3", Vector3.new(WorldData.WORLD_ARRIVAL[4].X, Y4 + 11, WorldData.WORLD_ARRIVAL[4].Z + 40), Color3.fromRGB(180, 100, 255), "↓ Sage Heaven")
-billboard(w4, Vector3.new(0, Y4 + 360, 0), "✧ PRIMAL CHAOS", Color3.fromRGB(255, 40, 120), "Realm 24 — 26", Color3.fromRGB(255, 200, 200))
+billboard(w4, Vector3.new(0, Y4 + 360, 0), "✧ PRIMAL CHAOS", Color3.fromRGB(255, 40, 120), "Realm 23 — 26", Color3.fromRGB(255, 200, 200))
+
+-- ══════════════════════════════════════════════════════════════════════════════
+-- UPPER-WORLD REALM ZONES (R10-26) — one floating island per realm, ringing the
+-- arrival area of its world. Positions come from WorldData.ZoneCenter so the
+-- NPC spawns and teleports line up automatically.
+-- ══════════════════════════════════════════════════════════════════════════════
+local UPPER_STYLE: { [number]: { folder: Folder, top: Enum.Material, rock: Enum.Material } } = {
+	[2] = { folder = w2, top = TM.LeafyGrass, rock = TM.Glacier },
+	[3] = { folder = w3, top = TM.Grass,      rock = TM.Slate   },
+	[4] = { folder = w4, top = TM.Basalt,     rock = TM.Basalt  },
+}
+
+for worldId = 2, 4 do
+	local style = UPPER_STYLE[worldId]
+	local wy = WorldData.WORLD_Y[worldId]
+	for _, realmId in ipairs(WorldData.RealmsInWorld(worldId)) do
+		local center = WorldData.ZoneCenter(realmId)   -- Y == wy
+		local realm  = CultivationData.GetRealm(realmId)
+		local theme  = WorldData.Theme(realmId)
+
+		makeIsland(center.X, wy - 4, center.Z, 512, style.top, style.rock)
+
+		local zone = Instance.new("Folder"); zone.Name = "Zone_" .. realmId; zone.Parent = style.folder
+		cyl("Floor",  zr * 2,     zh, Vector3.new(center.X, wy + zh / 2, center.Z), theme.floor, Enum.Material.SmoothPlastic, zone)
+		cyl("Border", zr * 2 + 6, 3,  Vector3.new(center.X, wy + zh, center.Z), theme.accent, Enum.Material.Neon, zone)
+		for i = 0, 15 do
+			local a = i / 16 * math.pi * 2
+			part("Post", Vector3.new(2.5, 8, 2.5),
+				Vector3.new(center.X + math.cos(a) * (zr - 2), wy + zh + 4, center.Z + math.sin(a) * (zr - 2)),
+				theme.accent, Enum.Material.Neon, zone)
+		end
+		-- Themed decoration ring (spires + glow orbs in the zone's accent)
+		for i = 0, 3 do
+			local a = i / 4 * math.pi * 2 + 0.4
+			local sx = center.X + math.cos(a) * (zr + 24)
+			local sz = center.Z + math.sin(a) * (zr + 24)
+			part("ZoneSpire", Vector3.new(5, 36, 5), Vector3.new(sx, wy + 18, sz), theme.floor, Enum.Material.Marble, zone)
+			ball("ZoneSpireTop", 7, Vector3.new(sx, wy + 39, sz), theme.accent, Enum.Material.Neon, zone)
+		end
+		billboard(zone, Vector3.new(center.X, wy + zh + 30, center.Z),
+			("R%d · %s"):format(realmId, realm and realm.name or "?"),
+			theme.accent, theme.name, Color3.fromRGB(255, 255, 255))
+	end
+end
 
 -- ══════════════════════════════════════════════════════════════════════════════
 print(string.format("[TTP] World generated — W1 (Y=%d), W2 (Y=%d), W3 (Y=%d), W4 (Y=%d)", Y1, Y2, Y3, Y4))

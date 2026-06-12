@@ -22,6 +22,15 @@ local CultivationService = {}
 local notifyEvent = Net.Event("Notify")
 local LIFESPAN_INF_SENTINEL = 1e15
 
+-- Breakthroughs beyond Mahayana (R10+) pay Immortal Jade.
+local function grantBreakthroughJade(player: Player, profile: any)
+	if profile.realm >= 10 then
+		local JadeData = require(GameData:WaitForChild("JadeData"))
+		local JadeService = require(script.Parent.JadeService)
+		JadeService.AddJade(player, profile.realm * JadeData.BREAKTHROUGH_JADE_PER_REALM)
+	end
+end
+
 local function updateMovement(player: Player)
 	local char = player.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid") :: Humanoid?
@@ -165,6 +174,7 @@ function CultivationService.DoRealmUp(player: Player)
 	local realm = CultivationData.GetRealm(profile.realm)
 	notifyEvent:FireClient(player, ("⚡ BREAKTHROUGH! Reached %s!"):format(realm and realm.name or "?"), "gold")
 	checkPhysiqueEvolution(player, profile)
+	grantBreakthroughJade(player, profile)
 	profile.fullHealOnRecompute = true
 	CultivationService.RecomputeStats(player)
 	local QuestService = require(script.Parent.QuestService)
@@ -205,6 +215,9 @@ function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: bo
 		local m = ProvidenceService.GetMultipliers(player)
 		local buffMult = Buffs.GetMult(player, "Exp")
 		gained = baseAmount * m.exp * buffMult * CultivationService.ZoneExpMult(player)
+		-- Jade Bazaar: Fortune Charm multiplies every non-raw EXP gain.
+		local okJ, JS = pcall(require, script.Parent.JadeService)
+		if okJ then gained *= (JS :: any).GetExpMult(player) end
 	end
 	profile.exp += gained
 	if gained > 0 then
@@ -253,6 +266,7 @@ function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: bo
 			local realm = CultivationData.GetRealm(profile.realm)
 			notifyEvent:FireClient(player, ("⚡ BREAKTHROUGH! Reached %s!"):format(realm and realm.name or "?"), "gold")
 			checkPhysiqueEvolution(player, profile)
+			grantBreakthroughJade(player, profile)
 			profile.fullHealOnRecompute = true
 			CultivationService.RecomputeStats(player)
 			local QuestService = require(script.Parent.QuestService)
@@ -271,13 +285,25 @@ end
 function CultivationService.OnBossKilled(player: Player, realmId: number)
 	local profile = DataManager.Get(player)
 	if not profile then return end
+	local firstKill = not profile.bossesKilled[realmId]
 	profile.bossesKilled[realmId] = true
+	-- First kill of each realm boss pays Immortal Jade.
+	if firstKill then
+		local JadeData = require(GameData:WaitForChild("JadeData"))
+		local JadeService = require(script.Parent.JadeService)
+		JadeService.AddJade(player, realmId * JadeData.BOSS_FIRSTKILL_JADE_PER_REALM)
+	end
 	CultivationService.AddEXP(player, 0)
 end
 
 function CultivationService.AddStones(player: Player, amount: number)
 	local profile = DataManager.Get(player)
 	if not profile then return end
+	if amount > 0 then
+		-- Jade Bazaar: Stone Magnet multiplies every stone gain (never costs).
+		local okJ, JS = pcall(require, script.Parent.JadeService)
+		if okJ then amount = math.floor(amount * (JS :: any).GetStoneMult(player)) end
+	end
 	profile.spiritStones = (profile.spiritStones or 0) + amount
 	if amount > 0 then
 		profile.lifetimeStones = (profile.lifetimeStones or 0) + amount

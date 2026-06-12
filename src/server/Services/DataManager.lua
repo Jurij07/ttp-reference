@@ -74,6 +74,11 @@ local function defaultProfile(): any
 		enhancements           = {},   -- { [id] = level }
 		-- Daily missions
 		daily                  = {},   -- { day, tasks, progress, claimed }
+		-- Immortal Jade (prestige currency) + Jade Bazaar
+		jade                   = 0,
+		jadeLifetime           = 0,
+		jadeUpgrades           = {},   -- { [id] = level }
+		tribulationWard        = false,
 	}
 end
 
@@ -117,6 +122,10 @@ local function reconcile(profile: any)
 	if type(profile.idleHuntRealm) ~= "number" then profile.idleHuntRealm = 0 end
 	if type(profile.enhancements) ~= "table" then profile.enhancements = {} end
 	if type(profile.daily) ~= "table" then profile.daily = {} end
+	if type(profile.jade) ~= "number" then profile.jade = 0 end
+	if type(profile.jadeLifetime) ~= "number" then profile.jadeLifetime = 0 end
+	if type(profile.jadeUpgrades) ~= "table" then profile.jadeUpgrades = {} end
+	if type(profile.tribulationWard) ~= "boolean" then profile.tribulationWard = false end
 end
 
 local function keyFor(userId: number): string

@@ -213,6 +213,8 @@ local leaderLayer    = mkOverlay("LeaderLayer")
 local bookLayer      = mkOverlay("BookLayer")
 local storeLayer     = mkOverlay("StoreLayer")
 local huntLayer      = mkOverlay("HuntLayer")
+local enhLayer       = mkOverlay("EnhLayer")
+local jadeLayer      = mkOverlay("JadeLayer")
 local SectData       = require(GameData:WaitForChild("SectData"))
 local CompanionData  = require(GameData:WaitForChild("CompanionData"))
 local FormationData  = require(GameData:WaitForChild("FormationData"))
@@ -265,12 +267,13 @@ end
 bindAttr("InDungeon", updateDungeonHud)
 bindAttr("DungeonFloor", updateDungeonHud)
 
-local statPanel = mkPanel("StatPanel", UDim2.new(0,192,0,88), UDim2.new(1,-14,0,14), Vector2.new(1,0), hudRoot)
+local statPanel = mkPanel("StatPanel", UDim2.new(0,192,0,108), UDim2.new(1,-14,0,14), Vector2.new(1,0), hudRoot)
 local stonesL   = mkLabel(statPanel,"💰 0",          UDim2.new(1,-20,0,22),UDim2.new(0,12,0,8), C.gold,15,Enum.Font.GothamBold)
-local karmaL    = mkLabel(statPanel,"⚖️ Karma: 0",   UDim2.new(1,-20,0,15),UDim2.new(0,12,0,36),C.t2,12)
-local killsL    = mkLabel(statPanel,"⚔️ Kills: 0",   UDim2.new(1,-20,0,15),UDim2.new(0,12,0,56),C.t2,12)
+local jadeL     = mkLabel(statPanel,"💎 0",          UDim2.new(1,-20,0,18),UDim2.new(0,12,0,34),C.cyan,13,Enum.Font.GothamBold)
+local karmaL    = mkLabel(statPanel,"⚖️ Karma: 0",   UDim2.new(1,-20,0,15),UDim2.new(0,12,0,56),C.t2,12)
+local killsL    = mkLabel(statPanel,"⚔️ Kills: 0",   UDim2.new(1,-20,0,15),UDim2.new(0,12,0,76),C.t2,12)
 
-local provPanel = mkPanel("ProvPanel", UDim2.new(0,192,0,112), UDim2.new(1,-14,0,110), Vector2.new(1,0), hudRoot)
+local provPanel = mkPanel("ProvPanel", UDim2.new(0,192,0,112), UDim2.new(1,-14,0,130), Vector2.new(1,0), hudRoot)
 mkLabel(provPanel,"🎲 PROVIDENCE",UDim2.new(1,-20,0,12),UDim2.new(0,12,0,6),C.t3,10,Enum.Font.GothamBold)
 local hAptL  = mkLabel(provPanel,"🌟 —",UDim2.new(1,-20,0,14),UDim2.new(0,12,0,24),C.t1,12)
 local hPhysL = mkLabel(provPanel,"💪 —",UDim2.new(1,-20,0,14),UDim2.new(0,12,0,42),C.t1,12)
@@ -1569,6 +1572,7 @@ bindAttr("SpiritStones", function(v)
 	stonesL.Text = "💰 " .. fmt(v)
 	shopStoneL.Text = "💰 " .. fmt(v)
 end)
+bindAttr("Jade",       function(v) jadeL.Text = "💎 " .. fmt(v or 0) end)
 bindAttr("Karma",      function(v) karmaL.Text = "⚖️ Karma: " .. tostring(math.floor(v or 0)) end)
 bindAttr("TotalKills", function(v) killsL.Text = "⚔️ Kills: " .. tostring(v or 0) end)
 
@@ -1817,7 +1821,7 @@ function closeAllOverlays()
 	titleLayer.Visible = false;     dungeonLayer.Visible = false
 	leaderLayer.Visible = false;    bookLayer.Visible = false
 	storeLayer.Visible = false;     huntLayer.Visible = false
-	enhLayer.Visible = false
+	enhLayer.Visible = false;       jadeLayer.Visible = false
 end
 
 mainMenuBtn.MouseButton1Click:Connect(function() closeAllOverlays(); mainMenuLayer.Visible = true end)
@@ -2018,8 +2022,9 @@ end
 
 -- ════════════════════════════════════════════════════════════
 -- ── Enhancement overlay (Spirit Cave / Stone Vein / Swift Hunt)
+--    (enhLayer is declared with the other overlays near the top so
+--    closeAllOverlays/Escape can capture it as an upvalue.)
 -- ════════════════════════════════════════════════════════════
-local enhLayer = mkOverlay("EnhLayer")
 do
 	local EnhancementData = require(GameData:WaitForChild("EnhancementData"))
 	local enhLevels: { [string]: number } = {}
@@ -2104,6 +2109,86 @@ do
 end
 
 -- ════════════════════════════════════════════════════════════
+-- ── Jade Bazaar overlay (Immortal Jade 💎 prestige shop)
+-- ════════════════════════════════════════════════════════════
+do
+	local JadeData = require(GameData:WaitForChild("JadeData"))
+	local jadeLevels: { [string]: number } = {}
+	local wardActive = false
+
+	local card = mkPanel("JadeCard", UDim2.new(0,520,0,560), UDim2.fromScale(0.5,0.5), Vector2.new(0.5,0.5), jadeLayer)
+	mkLabel(card,"💎 JADE BAZAAR",UDim2.new(1,-50,0,24),UDim2.fromOffset(16,14),C.cyan,18,Enum.Font.GothamBold)
+	mkLabel(card,"Immortal Jade is earned from tribulations, first boss kills, breakthroughs beyond Mahayana and daily missions.",
+		UDim2.new(1,-32,0,30),UDim2.fromOffset(16,42),C.t2,11).TextWrapped = true
+	local closeJade = mkButton(card,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,10),C.bg5)
+	local jadeBalL = mkLabel(card,"💎 —",UDim2.new(0,160,0,18),UDim2.new(1,-176,0,44),C.cyan,13,Enum.Font.GothamBold,Enum.TextXAlignment.Right)
+	local jadeRows: { Frame } = {}
+
+	local function rebuildJade()
+		for _, row in ipairs(jadeRows) do row:Destroy() end
+		table.clear(jadeRows)
+		local jade = (player:GetAttribute("Jade") or 0) :: number
+		jadeBalL.Text = ("💎 %s"):format(fmt(jade))
+		for idx, item in ipairs(JadeData.ITEMS) do
+			local row = Instance.new("Frame")
+			row.Size = UDim2.new(1,-24,0,104); row.Position = UDim2.fromOffset(12, 80 + (idx-1)*112)
+			row.BackgroundColor3 = C.bg3; row.BorderSizePixel = 0
+			corner(row,10); stroke(row,C.border); row.Parent = card
+			table.insert(jadeRows, row)
+
+			local lvl = (jadeLevels[item.id] or 0) :: number
+			local title = item.kind == "permanent"
+				and ("%s  %s   Lv %d / %d"):format(item.icon, item.name, lvl, item.maxLevel or 1)
+				or  ("%s  %s"):format(item.icon, item.name)
+			mkLabel(row, title, UDim2.new(1,-170,0,20),UDim2.fromOffset(14,8),C.t1,14,Enum.Font.GothamBold)
+			local descL = mkLabel(row, item.desc, UDim2.new(1,-170,0,46),UDim2.fromOffset(14,30),C.t2,11)
+			descL.TextWrapped = true
+
+			if item.kind == "permanent" then
+				if lvl >= (item.maxLevel or 1) then
+					mkLabel(row,"✦ MAX",UDim2.new(0,140,0,40),UDim2.new(1,-154,0,32),C.gold,15,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+				else
+					local cost = JadeData.NextCost(item, lvl)
+					local b = mkButton(row, ("⬆ Upgrade\n💎 %s"):format(fmt(cost)),
+						UDim2.new(0,140,0,66), UDim2.new(1,-154,0,19), jade >= cost and C.a1 or C.bg4)
+					b.TextSize = 12
+					local id = item.id
+					b.MouseButton1Click:Connect(function() Net.Event("BuyJadeItem"):FireServer(id) end)
+				end
+			else
+				if item.id == "tribulation_ward" and wardActive then
+					mkLabel(row,"🛡️ Inscribed ✓",UDim2.new(0,140,0,40),UDim2.new(1,-154,0,32),C.green,13,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+				else
+					local cost = item.cost or 0
+					local b = mkButton(row, ("Use now\n💎 %s"):format(fmt(cost)),
+						UDim2.new(0,140,0,66), UDim2.new(1,-154,0,19), jade >= cost and C.green or C.bg4)
+					b.TextSize = 12
+					local id = item.id
+					b.MouseButton1Click:Connect(function() Net.Event("BuyJadeItem"):FireServer(id) end)
+				end
+			end
+		end
+	end
+
+	Net.Event("JadeBazaarSync").OnClientEvent:Connect(function(levels: any, ward: any)
+		if type(levels) == "table" then
+			for k, v in pairs(levels) do jadeLevels[k] = v end
+		end
+		wardActive = ward == true
+		if jadeLayer.Visible then rebuildJade() end
+	end)
+	player:GetAttributeChangedSignal("Jade"):Connect(function()
+		if jadeLayer.Visible then rebuildJade() end
+	end)
+	closeJade.MouseButton1Click:Connect(function() jadeLayer.Visible = false end)
+
+	local jadeBtn = mkButton(hudRoot,"💎",UDim2.new(0,46,0,46),UDim2.new(1,-374,1,-14),C.bg4,Vector2.new(1,1))
+	jadeBtn.MouseButton1Click:Connect(function()
+		closeAllOverlays(); Net.Event("GetJadeBazaar"):FireServer(); rebuildJade(); jadeLayer.Visible = true
+	end)
+end
+
+-- ════════════════════════════════════════════════════════════
 -- ── Keyboard shortcuts
 -- ════════════════════════════════════════════════════════════
 local useTechRemote = Net.Event("UseTechnique")
@@ -2115,7 +2200,7 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible
 			or sectLayer.Visible or worldLayer.Visible or companionLayer.Visible or formationLayer.Visible
 			or titleLayer.Visible or dungeonLayer.Visible or leaderLayer.Visible or bookLayer.Visible
-			or storeLayer.Visible or huntLayer.Visible or enhLayer.Visible then
+			or storeLayer.Visible or huntLayer.Visible or enhLayer.Visible or jadeLayer.Visible then
 			closeAllOverlays()
 		elseif seclPopup.Visible then
 			seclPopup.Visible = false

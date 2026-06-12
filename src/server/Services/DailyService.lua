@@ -138,8 +138,13 @@ function DailyService.Start()
 		local CS = require(script.Parent.CultivationService)
 		if task_.rewardStones > 0 then CS.AddStones(player, task_.rewardStones) end
 		if task_.rewardExp    > 0 then CS.AddEXP(player, task_.rewardExp, true) end
+		-- Every claimed daily also pays a little Immortal Jade.
+		local JadeData = require(GameData:WaitForChild("JadeData"))
+		local JadeService = require(script.Parent.JadeService)
+		JadeService.AddJade(player, JadeData.DAILY_CLAIM_JADE)
 		notifyEvent:FireClient(player,
-			("%s Claimed: %s! +%d 💰 +%d EXP"):format(task_.icon, task_.title, task_.rewardStones, task_.rewardExp), "gold")
+			("%s Claimed: %s! +%d 💰 +%d EXP +%d 💎"):format(
+				task_.icon, task_.title, task_.rewardStones, task_.rewardExp, JadeData.DAILY_CLAIM_JADE), "gold")
 		syncDaily(player)
 	end)
 

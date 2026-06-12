@@ -74,6 +74,13 @@ function TribulationService.Begin(player: Player, fromRealm: number)
 	local resist = breakthroughResist(profile)
 	local fraction = TribulationData.DamageFraction(trib, profile.karma or 0) * (1 - resist)
 
+	-- Jade Bazaar: a Tribulation Ward halves the damage of this tribulation.
+	local JadeService = require(script.Parent.JadeService)
+	if JadeService.ConsumeTribulationWard(player) then
+		fraction *= 0.5
+		notifyEvent:FireClient(player, "🛡️ Tribulation Ward activates — lightning damage halved!", "gold")
+	end
+
 	task.spawn(function()
 		for wave = 1, trib.waves do
 			task.wait(WAVE_INTERVAL)
@@ -106,6 +113,9 @@ function TribulationService.Begin(player: Player, fromRealm: number)
 		profile.tribulationsSurvived = (profile.tribulationsSurvived or 0) + 1
 		local TitleService = require(script.Parent.TitleService)
 		TitleService.CheckUnlocks(player)
+		-- Surviving heavenly lightning pays Immortal Jade.
+		local JadeData = require(GameData:WaitForChild("JadeData"))
+		JadeService.AddJade(player, fromRealm * JadeData.TRIBULATION_JADE_PER_REALM)
 
 		-- Erst aufsteigen (setzt exp=0, Realm+1), DANN Belohnung auf den
 		-- neuen Realm gutschreiben — sonst würde die Belohnungs-EXP sofort

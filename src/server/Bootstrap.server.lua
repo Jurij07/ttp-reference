@@ -27,6 +27,7 @@ local IdleService        = require(script.Parent.Services.IdleService)
 local EnhancementService = require(script.Parent.Services.EnhancementService)
 local DailyService       = require(script.Parent.Services.DailyService)
 local JadeService        = require(script.Parent.Services.JadeService)
+local TechniqueMasteryService = require(script.Parent.Services.TechniqueMasteryService)
 
 -- World systems (R1–R26 world concept)
 local WorldTransitionService          = require(script.Parent.Services.WorldTransitionService)
@@ -66,6 +67,7 @@ IdleService.Start()
 EnhancementService.Start()
 DailyService.Start()
 JadeService.Start()
+TechniqueMasteryService.Start()
 
 -- World systems
 WorldTransitionService.Start()

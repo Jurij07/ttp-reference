@@ -79,6 +79,9 @@ local function defaultProfile(): any
 		jadeLifetime           = 0,
 		jadeUpgrades           = {},   -- { [id] = level }
 		tribulationWard        = false,
+		-- Technique mastery (full 59-entry catalog)
+		techniques             = {},   -- { [id] = true }
+		activeTechnique        = nil,  -- equipped [Q] technique id
 	}
 end
 
@@ -126,6 +129,7 @@ local function reconcile(profile: any)
 	if type(profile.jadeLifetime) ~= "number" then profile.jadeLifetime = 0 end
 	if type(profile.jadeUpgrades) ~= "table" then profile.jadeUpgrades = {} end
 	if type(profile.tribulationWard) ~= "boolean" then profile.tribulationWard = false end
+	if type(profile.techniques) ~= "table" then profile.techniques = {} end
 end
 
 local function keyFor(userId: number): string

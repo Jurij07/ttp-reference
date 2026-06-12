@@ -51,8 +51,29 @@ function TechniqueService.UseActive(player: Player)
 	local cooldownUntil = (player:GetAttribute("TechCooldownUntil") or 0) :: number
 	if os.time() < cooldownUntil then return end
 
+	-- Equipped catalog technique (TechniqueMasteryService) takes priority;
+	-- otherwise the Dao-affinity default applies.
 	local dao = (player:GetAttribute("DaoAffinity") or "") :: string
-	local tech = TechniqueData.GetForDao(dao) or TechniqueData.Get("basic_strike")
+	local tech: any = TechniqueData.GetForDao(dao) or TechniqueData.Get("basic_strike")
+	local okM, TMS = pcall(require, script.Parent.TechniqueMasteryService)
+	if okM then
+		local equippedId = (TMS :: any).GetEquipped(player)
+		if equippedId then
+			local GameData_ = ReplicatedStorage:WaitForChild("GameData")
+			local TechniqueCatalog = require(GameData_:WaitForChild("TechniqueCatalog"))
+			local TechniqueMasteryData = require(GameData_:WaitForChild("TechniqueMasteryData"))
+			local entry = TechniqueCatalog.Get(equippedId)
+			local eff = TechniqueMasteryData.Get(equippedId)
+			if entry and eff and eff.dmgMult then
+				tech = {
+					name = entry.name,
+					dmgMult = eff.dmgMult,
+					healFrac = eff.healFrac,
+					cooldown = math.clamp(3 + eff.dmgMult * 0.8, 4, 12),
+				}
+			end
+		end
+	end
 	if not tech then return end
 
 	-- Per-player server-side cooldown

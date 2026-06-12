@@ -93,7 +93,15 @@ function CultivationService.RecomputeStats(player: Player)
 	-- Blank Realm Insight: permanent +1% to all stats once earned.
 	local insight = player:GetAttribute("BlankRealmInsight") and 1.01 or 1.0
 
-	local newMaxHP = math.floor(baseHP * m.hp * eq.hp * insight)
+	-- Learned passive techniques (full catalog) add additive multipliers.
+	local tmHp, tmDmg, tmDef = 1.0, 1.0, 1.0
+	local okT, TMS = pcall(require, script.Parent.TechniqueMasteryService)
+	if okT then
+		local tb = (TMS :: any).GetBonuses(player)
+		tmHp, tmDmg, tmDef = 1 + tb.hp, 1 + tb.dmg, 1 + tb.def
+	end
+
+	local newMaxHP = math.floor(baseHP * m.hp * eq.hp * insight * tmHp)
 	local oldMaxHP = (player:GetAttribute("MaxHP") or 0) :: number
 	local oldHP    = (player:GetAttribute("HP") or 0) :: number
 	player:SetAttribute("MaxHP", newMaxHP)
@@ -105,8 +113,8 @@ function CultivationService.RecomputeStats(player: Player)
 		-- Sonst aktuelle HP beibehalten (kein Gratis-Heal durch Umrüsten)
 		player:SetAttribute("HP", math.clamp(oldHP, 1, newMaxHP))
 	end
-	player:SetAttribute("ATK",     math.floor(baseDmg * m.dmg * eq.dmg * insight))
-	player:SetAttribute("Defense", math.floor(baseDef * m.def * eq.def * insight))
+	player:SetAttribute("ATK",     math.floor(baseDmg * m.dmg * eq.dmg * insight * tmDmg))
+	player:SetAttribute("Defense", math.floor(baseDef * m.def * eq.def * insight * tmDef))
 
 	local baseLife = CultivationData.GetLifespan(profile.realm)
 	local infinite = baseLife == math.huge
@@ -218,6 +226,9 @@ function CultivationService.AddEXP(player: Player, baseAmount: number, isRaw: bo
 		-- Jade Bazaar: Fortune Charm multiplies every non-raw EXP gain.
 		local okJ, JS = pcall(require, script.Parent.JadeService)
 		if okJ then gained *= (JS :: any).GetExpMult(player) end
+		-- Learned passive techniques (e.g. Dao Heart, Perfect Dao Heart).
+		local okT, TMS = pcall(require, script.Parent.TechniqueMasteryService)
+		if okT then gained *= (1 + (TMS :: any).GetBonuses(player).exp) end
 	end
 	profile.exp += gained
 	if gained > 0 then
@@ -303,6 +314,9 @@ function CultivationService.AddStones(player: Player, amount: number)
 		-- Jade Bazaar: Stone Magnet multiplies every stone gain (never costs).
 		local okJ, JS = pcall(require, script.Parent.JadeService)
 		if okJ then amount = math.floor(amount * (JS :: any).GetStoneMult(player)) end
+		-- Loot-sense techniques (e.g. Ancient Ruin Sensing).
+		local okT, TMS = pcall(require, script.Parent.TechniqueMasteryService)
+		if okT then amount = math.floor(amount * (1 + (TMS :: any).GetBonuses(player).stones)) end
 	end
 	profile.spiritStones = (profile.spiritStones or 0) + amount
 	if amount > 0 then

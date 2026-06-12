@@ -215,6 +215,7 @@ local storeLayer     = mkOverlay("StoreLayer")
 local huntLayer      = mkOverlay("HuntLayer")
 local enhLayer       = mkOverlay("EnhLayer")
 local jadeLayer      = mkOverlay("JadeLayer")
+local techLayer      = mkOverlay("TechLayer")
 local SectData       = require(GameData:WaitForChild("SectData"))
 local CompanionData  = require(GameData:WaitForChild("CompanionData"))
 local FormationData  = require(GameData:WaitForChild("FormationData"))
@@ -1822,6 +1823,7 @@ function closeAllOverlays()
 	leaderLayer.Visible = false;    bookLayer.Visible = false
 	storeLayer.Visible = false;     huntLayer.Visible = false
 	enhLayer.Visible = false;       jadeLayer.Visible = false
+	techLayer.Visible = false
 end
 
 mainMenuBtn.MouseButton1Click:Connect(function() closeAllOverlays(); mainMenuLayer.Visible = true end)
@@ -2189,6 +2191,112 @@ do
 end
 
 -- ════════════════════════════════════════════════════════════
+-- ── Technique Compendium overlay (full 59-entry catalog)
+-- ════════════════════════════════════════════════════════════
+do
+	local TechniqueMasteryData = require(GameData:WaitForChild("TechniqueMasteryData"))
+	local knownTech: { [string]: boolean } = {}
+	local equippedTech: string? = nil
+
+	local TTYPE_COLOR: { [string]: Color3 } = {
+		passive = C.green, active = C.hp, movement = C.cyan, healing = Color3.fromHex("7DD3FC"),
+		dao = C.exp, physique = C.warn, special = C.gold, formation = C.a1,
+	}
+
+	local card = mkPanel("TechCard", UDim2.new(0,660,0,560), UDim2.fromScale(0.5,0.5), Vector2.new(0.5,0.5), techLayer)
+	mkLabel(card,"📘 TECHNIQUE COMPENDIUM",UDim2.new(1,-220,0,24),UDim2.fromOffset(16,14),C.gold,18,Enum.Font.GothamBold)
+	local closeTech = mkButton(card,"✕",UDim2.new(0,28,0,28),UDim2.new(1,-36,0,10),C.bg5)
+	local techCountL = mkLabel(card,"0 / 0 mastered",UDim2.new(0,170,0,18),UDim2.new(1,-216,0,18),C.t2,12,Enum.Font.GothamBold,Enum.TextXAlignment.Right)
+	local techList, _ = mkScrollList(card, UDim2.new(1,-24,1,-58), UDim2.fromOffset(12,46))
+
+	local function rebuildTech()
+		for _, ch in ipairs(techList:GetChildren()) do
+			if ch:IsA("Frame") or ch:IsA("TextLabel") then ch:Destroy() end
+		end
+		local myRealm = (player:GetAttribute("Realm") or 1) :: number
+		local stones = (player:GetAttribute("SpiritStones") or 0) :: number
+		local order = 0
+		local total, mastered = 0, 0
+
+		for realm = 1, 9 do
+			local bucket = {}
+			for _, e in ipairs(TechniqueCatalog.ENTRIES) do
+				if e.realm == realm then table.insert(bucket, e) end
+			end
+			if #bucket == 0 then continue end
+
+			order += 1
+			local head = Instance.new("TextLabel")
+			head.Size = UDim2.new(1,-8,0,22); head.BackgroundTransparency = 1
+			head.Text = ("— REALM %d —"):format(realm); head.TextColor3 = realm <= myRealm and C.gold or C.t3
+			head.TextSize = 12; head.Font = Enum.Font.GothamBold; head.LayoutOrder = order
+			head.Parent = techList
+
+			for _, e in ipairs(bucket) do
+				total += 1
+				local isKnown = knownTech[e.id] == true
+				if isKnown then mastered += 1 end
+				local isActive = TechniqueMasteryData.IsActive(e.id)
+				local isEquipped = equippedTech == e.id
+
+				order += 1
+				local row = Instance.new("Frame")
+				row.Size = UDim2.new(1,-8,0,64); row.BackgroundColor3 = C.bg3
+				corner(row,8); stroke(row, isEquipped and C.gold or (isKnown and C.green or C.border))
+				row.LayoutOrder = order; row.Parent = techList
+
+				mkLabel(row, e.name, UDim2.new(1,-280,0,18),UDim2.fromOffset(12,6),
+					isKnown and C.t1 or C.t2, 13, Enum.Font.GothamBold)
+				local badge = mkLabel(row, e.ttype:upper(), UDim2.new(0,70,0,14),UDim2.new(1,-260,0,8),
+					TTYPE_COLOR[e.ttype] or C.t3, 10, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+				badge.BackgroundColor3 = C.bg4; badge.BackgroundTransparency = 0.3
+				local descL = mkLabel(row, e.desc, UDim2.new(1,-180,0,32),UDim2.fromOffset(12,26),C.t3,10)
+				descL.TextWrapped = true; descL.TextTruncate = Enum.TextTruncate.AtEnd
+
+				if isKnown then
+					if isActive then
+						local b = mkButton(row, isEquipped and "[Q] Equipped ✓" or "Equip [Q]",
+							UDim2.new(0,140,0,30), UDim2.new(1,-152,0,17), isEquipped and C.bg4 or C.green)
+						b.TextSize = 11
+						if not isEquipped then
+							local id = e.id
+							b.MouseButton1Click:Connect(function() Net.Event("EquipTechnique"):FireServer(id) end)
+						end
+					else
+						mkLabel(row,"✓ Mastered",UDim2.new(0,140,0,26),UDim2.new(1,-152,0,19),C.green,12,Enum.Font.GothamBold,Enum.TextXAlignment.Center)
+					end
+				elseif realm > myRealm then
+					mkLabel(row,("🔒 Realm %d"):format(realm),UDim2.new(0,140,0,26),UDim2.new(1,-152,0,19),C.t3,11,nil,Enum.TextXAlignment.Center)
+				else
+					local cost = TechniqueMasteryData.LearnCost(e.id, e.realm)
+					local b = mkButton(row, ("Learn\n💰 %s"):format(fmt(cost)),
+						UDim2.new(0,140,0,44), UDim2.new(1,-152,0,10), stones >= cost and C.a1 or C.bg4)
+					b.TextSize = 11
+					local id = e.id
+					b.MouseButton1Click:Connect(function() Net.Event("LearnTechnique"):FireServer(id) end)
+				end
+			end
+		end
+		techCountL.Text = ("%d / %d mastered"):format(mastered, total)
+	end
+
+	Net.Event("TechniqueMasterySync").OnClientEvent:Connect(function(known: any, equipped: any)
+		if type(known) == "table" then
+			table.clear(knownTech)
+			for k, v in pairs(known) do if v then knownTech[k] = true end end
+		end
+		equippedTech = type(equipped) == "string" and equipped or nil
+		if techLayer.Visible then rebuildTech() end
+	end)
+	closeTech.MouseButton1Click:Connect(function() techLayer.Visible = false end)
+
+	local techBtn = mkButton(hudRoot,"📘",UDim2.new(0,46,0,46),UDim2.new(1,-426,1,-14),C.bg4,Vector2.new(1,1))
+	techBtn.MouseButton1Click:Connect(function()
+		closeAllOverlays(); Net.Event("GetTechniques"):FireServer(); rebuildTech(); techLayer.Visible = true
+	end)
+end
+
+-- ════════════════════════════════════════════════════════════
 -- ── Keyboard shortcuts
 -- ════════════════════════════════════════════════════════════
 local useTechRemote = Net.Event("UseTechnique")
@@ -2200,7 +2308,8 @@ UserInputService.InputBegan:Connect(function(input, processed)
 		if mainMenuLayer.Visible or inventoryLayer.Visible or shopLayer.Visible or questLayer.Visible
 			or sectLayer.Visible or worldLayer.Visible or companionLayer.Visible or formationLayer.Visible
 			or titleLayer.Visible or dungeonLayer.Visible or leaderLayer.Visible or bookLayer.Visible
-			or storeLayer.Visible or huntLayer.Visible or enhLayer.Visible or jadeLayer.Visible then
+			or storeLayer.Visible or huntLayer.Visible or enhLayer.Visible or jadeLayer.Visible
+			or techLayer.Visible then
 			closeAllOverlays()
 		elseif seclPopup.Visible then
 			seclPopup.Visible = false

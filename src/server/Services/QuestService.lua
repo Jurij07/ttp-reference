@@ -155,10 +155,13 @@ function QuestService.CompleteNpcQuest(player: Player, questId: string)
 	sendNpcAvailable(player)
 end
 
--- Called by CombatService.rewardKill after every NPC kill.
+-- Called by CombatService.rewardKill after every NPC kill. A single kill may
+-- progress several active quests, so completions are collected first and
+-- applied after the scan (CompleteNpcQuest mutates qp.active).
 function QuestService.OnNPCKilled(player: Player, npcName: string, realmId: number)
 	local qp = npcQP(player); if not qp then return end
 	local changed = false
+	local done: { string } = {}
 	for _, aq in ipairs(qp.active) do
 		local quest = QuestData.NPC_ALL[aq.id]
 		if quest then
@@ -175,46 +178,48 @@ function QuestService.OnNPCKilled(player: Player, npcName: string, realmId: numb
 					aq.progress.kills = (aq.progress.kills or 0) + 1
 					changed = true
 					if aq.progress.kills >= (obj.count or 1) then
-						QuestService.CompleteNpcQuest(player, aq.id)
-						return
+						table.insert(done, aq.id)
 					end
 				end
 			end
 		end
 	end
-	if changed then sendNpcList(player) end
+	for _, id in ipairs(done) do QuestService.CompleteNpcQuest(player, id) end
+	if changed and #done == 0 then sendNpcList(player) end
 end
 
 -- Called by CultivationService after a realm breakthrough.
 function QuestService.OnRealmReached(player: Player, realm: number)
 	local qp = npcQP(player); if not qp then return end
+	local done: { string } = {}
 	for _, aq in ipairs(qp.active) do
 		local quest = QuestData.NPC_ALL[aq.id]
 		if quest then
 			for _, obj in ipairs(quest.objectives) do
 				if obj.type == "reach_realm" and realm >= (obj.realm or math.huge) then
-					QuestService.CompleteNpcQuest(player, aq.id)
-					return
+					table.insert(done, aq.id)
 				end
 			end
 		end
 	end
+	for _, id in ipairs(done) do QuestService.CompleteNpcQuest(player, id) end
 end
 
 -- Called by CultivationService.AddStones (lifetime earnings check).
 function QuestService.OnStonesChanged(player: Player, lifetimeStones: number)
 	local qp = npcQP(player); if not qp then return end
+	local done: { string } = {}
 	for _, aq in ipairs(qp.active) do
 		local quest = QuestData.NPC_ALL[aq.id]
 		if quest then
 			for _, obj in ipairs(quest.objectives) do
 				if obj.type == "earn_stones" and lifetimeStones >= (obj.count or math.huge) then
-					QuestService.CompleteNpcQuest(player, aq.id)
-					return
+					table.insert(done, aq.id)
 				end
 			end
 		end
 	end
+	for _, id in ipairs(done) do QuestService.CompleteNpcQuest(player, id) end
 end
 
 -- ── Start ────────────────────────────────────────────────────
@@ -255,6 +260,20 @@ function QuestService.Start()
 		sendNpcList(player)
 		sendNpcAvailable(player)
 		notifyEvent:FireClient(player, ("%s Quest accepted: %s"):format(quest.icon, quest.title), "good")
+		-- Goals the player already satisfies (e.g. accepting a "reach realm 10"
+		-- quest at realm 12) complete on the spot.
+		local profile = DataManager.Get(player)
+		if profile then
+			for _, obj in ipairs(quest.objectives) do
+				if obj.type == "reach_realm" and (profile.realm or 1) >= (obj.realm or math.huge) then
+					QuestService.CompleteNpcQuest(player, id)
+					return
+				elseif obj.type == "earn_stones" and (profile.lifetimeStones or 0) >= (obj.count or math.huge) then
+					QuestService.CompleteNpcQuest(player, id)
+					return
+				end
+			end
+		end
 	end)
 
 	-- NPC quest abandon

@@ -180,6 +180,18 @@ local function tree(parent: Instance, pos: Vector3, canopyColor: Color3, canopyM
 	ball("Canopy", 14, pos + Vector3.new(0, 18, 0), canopyColor, canopyMat, parent)
 end
 
+-- A quest-giving NPC figure: robed body, head, hovering golden quest mark and
+-- a name billboard. Pure decoration — quests are accepted via the Quest Log.
+local function questGiverFigure(parent: Instance, pos: Vector3, icon: string, name: string, robe: Color3)
+	local body = cyl("QuestGiver", 3.5, 5, pos + Vector3.new(0, 2.5, 0), robe, Enum.Material.Fabric, parent)
+	body.Orientation = Vector3.new(0, 0, 0)
+	ball("QuestGiverHead", 2.2, pos + Vector3.new(0, 6, 0), Color3.fromRGB(235, 200, 170), Enum.Material.SmoothPlastic, parent)
+	ball("QuestMark", 1.4, pos + Vector3.new(0, 9, 0), Color3.fromRGB(255, 215, 60), Enum.Material.Neon, parent)
+	billboard(parent, pos + Vector3.new(0, 11, 0),
+		("%s %s"):format(icon, name), Color3.fromRGB(255, 215, 120),
+		"❗ Quests [Quest Log]", Color3.fromRGB(255, 240, 200))
+end
+
 local rng = Random.new(20260610)
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -280,16 +292,10 @@ do  -- Quest-giver NPCs (sequential quest chains — see QuestData.NPC_CHAINS)
 		{ name = "Village Elder",      icon = "👴", dx =  28, dz =  -8, robe = Color3.fromRGB(120, 100, 70)  },
 		{ name = "Cultivation Master", icon = "🧙", dx = -10, dz =  30, robe = Color3.fromRGB(90, 70, 140)   },
 		{ name = "Merchant",           icon = "💰", dx = -24, dz = -22, robe = Color3.fromRGB(150, 110, 50)  },
+		{ name = "Beast Hunter Lin",   icon = "🏹", dx =  12, dz = -32, robe = Color3.fromRGB(70, 110, 70)   },
 	}
 	for _, g in ipairs(GIVERS) do
-		local gx, gz = hub.X + g.dx, hub.Z + g.dz
-		local robe = cyl("QuestGiver", 3.5, 5, Vector3.new(gx, Y1 + 2.5, gz), g.robe, Enum.Material.Fabric, hubZone)
-		robe.Orientation = Vector3.new(0, 0, 0)
-		ball("QuestGiverHead", 2.2, Vector3.new(gx, Y1 + 6, gz), Color3.fromRGB(235, 200, 170), Enum.Material.SmoothPlastic, hubZone)
-		ball("QuestMark", 1.4, Vector3.new(gx, Y1 + 9, gz), Color3.fromRGB(255, 215, 60), Enum.Material.Neon, hubZone)
-		billboard(hubZone, Vector3.new(gx, Y1 + 11, gz),
-			("%s %s"):format(g.icon, g.name), Color3.fromRGB(255, 215, 120),
-			"❗ Quests [Quest Log]", Color3.fromRGB(255, 240, 200))
+		questGiverFigure(hubZone, Vector3.new(hub.X + g.dx, Y1, hub.Z + g.dz), g.icon, g.name, g.robe)
 	end
 end
 
@@ -654,6 +660,7 @@ end
 
 portalArch(w2, "Portal_W2_to_W1", Vector3.new(av.X - 60, Y2 + 3, av.Z), Color3.fromRGB(120, 200, 120), "↓ Mortal Earth")
 portalArch(w2, "Portal_W2_to_W3", Vector3.new(av.X + 60, Y2 + 3, av.Z), Color3.fromRGB(180, 100, 255), "↑ Sage Heaven (R16)")
+questGiverFigure(w2, Vector3.new(av.X - 18, Y2 + 6, av.Z + 22), "🏮", "Immortal Envoy", Color3.fromRGB(180, 60, 60))
 billboard(w2, Vector3.new(0, Y2 + 140, 0), "✦ IMMORTAL SKY", Color3.fromRGB(100, 255, 200), "Realm 10 — 15", Color3.fromRGB(255, 255, 255))
 
 -- ══════════════════════════════════════════════════════════════════════════════
@@ -746,6 +753,7 @@ do
 end
 
 cyl("W3ArrivalPad", 40, 6, Vector3.new(WorldData.WORLD_ARRIVAL[3].X, Y3 + 9, WorldData.WORLD_ARRIVAL[3].Z), Color3.fromRGB(120, 80, 160), Enum.Material.Marble, w3)
+questGiverFigure(w3, Vector3.new(WorldData.WORLD_ARRIVAL[3].X + 20, Y3 + 12, WorldData.WORLD_ARRIVAL[3].Z + 18), "🔮", "Sage Oracle", Color3.fromRGB(110, 70, 160))
 portalArch(w3, "Portal_W3_to_W2", Vector3.new(-240, Y3 + 6, 0), Color3.fromRGB(120, 200, 120), "↓ Immortal Sky")
 portalArch(w3, "Portal_W3_to_W4", Vector3.new(240, Y3 + 6, 0), Color3.fromRGB(255, 60, 60), "↑ Primal Chaos (R23)")
 billboard(w3, Vector3.new(0, Y3 + 200, 0), "⋆ SAGE HEAVEN", Color3.fromRGB(200, 100, 255), "Realm 16 — 22", Color3.fromRGB(255, 255, 255))
@@ -848,6 +856,7 @@ do
 end
 
 portalArch(w4, "Portal_W4_to_W3", Vector3.new(WorldData.WORLD_ARRIVAL[4].X, Y4 + 11, WorldData.WORLD_ARRIVAL[4].Z + 40), Color3.fromRGB(180, 100, 255), "↓ Sage Heaven")
+questGiverFigure(w4, Vector3.new(WorldData.WORLD_ARRIVAL[4].X + 24, Y4 + 13, WorldData.WORLD_ARRIVAL[4].Z - 16), "🌑", "Chaos Warden", Color3.fromRGB(40, 30, 60))
 billboard(w4, Vector3.new(0, Y4 + 360, 0), "✧ PRIMAL CHAOS", Color3.fromRGB(255, 40, 120), "Realm 23 — 26", Color3.fromRGB(255, 200, 200))
 
 -- ══════════════════════════════════════════════════════════════════════════════

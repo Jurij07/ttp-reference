@@ -17,7 +17,7 @@ export type Effect = {
 	learnCost: number?,                    -- spirit stones (overrides realm default)
 }
 
-TechniqueMasteryData.EFFECTS: { [string]: Effect } = {
+TechniqueMasteryData.EFFECTS = {
 	-- ── Realm 1 ──────────────────────────────────────────────
 	basic_qi_refinement_art = { exp = 0.10, learnCost = 100 },
 	basic_strike            = { dmgMult = 1.2 },
@@ -86,7 +86,7 @@ TechniqueMasteryData.EFFECTS: { [string]: Effect } = {
 	mahayana_breaking_palm   = { dmgMult = 7.0, learnCost = 5000000 },
 	world_law_comprehension  = { dmg = 0.50, exp = 0.25, learnCost = 2000000 },
 	reincarnation_technique  = { hp = 0.30, learnCost = 5000000 },
-}
+} :: { [string]: Effect }
 
 -- Spirit-stone learn cost by the technique's realm if no explicit override.
 local DEFAULT_COST: { [number]: number } = {

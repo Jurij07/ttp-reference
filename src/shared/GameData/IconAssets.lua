@@ -7,7 +7,7 @@
 
 local IconAssets = {}
 
-IconAssets.IDS: { [string]: number } = {
+IconAssets.IDS = {
 	game_icon        = 0,
 	spirit_stone     = 0,
 	immortal_jade    = 0,
@@ -21,7 +21,7 @@ IconAssets.IDS: { [string]: number } = {
 	world2_sky       = 0,
 	world3_sage      = 0,
 	world4_chaos     = 0,
-}
+} :: { [string]: number }
 
 -- "rbxassetid://N" for ImageLabel.Image / ImageButton.Image, or nil if the
 -- asset hasn't been uploaded yet.

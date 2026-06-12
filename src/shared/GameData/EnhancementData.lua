@@ -13,7 +13,7 @@ export type Upgrade = {
 	huntBonus: number?,   -- fraction of tick shaved per level (0.10 = −10%)
 }
 
-EnhancementData.UPGRADES: { Upgrade } = {
+EnhancementData.UPGRADES = {
 	{
 		id = "spirit_cave", name = "Spirit Cave", icon = "☯️",
 		desc = "Deepen your cultivation grotto. +25% passive EXP rate per level.",
@@ -32,7 +32,7 @@ EnhancementData.UPGRADES: { Upgrade } = {
 		maxLevel = 8, baseCost = 900, costMult = 2.20,
 		huntBonus = 0.10,
 	},
-}
+} :: { Upgrade }
 
 function EnhancementData.Get(id: string): Upgrade?
 	for _, u in ipairs(EnhancementData.UPGRADES) do

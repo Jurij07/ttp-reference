@@ -18,7 +18,7 @@ export type JadeItem = {
 	cost: number?,
 }
 
-JadeData.ITEMS: { JadeItem } = {
+JadeData.ITEMS = {
 	{
 		id = "fortune_charm", name = "Fortune Charm", icon = "🍀", kind = "permanent",
 		desc = "Providence smiles on you. +10% to ALL EXP gains per level — passive, hunts, quests, everything.",
@@ -39,7 +39,7 @@ JadeData.ITEMS: { JadeItem } = {
 		desc = "A single-use ward inscribed against heavenly lightning. Your next tribulation deals 50% less damage.",
 		cost = 25,
 	},
-}
+} :: { JadeItem }
 
 function JadeData.Get(id: string): JadeItem?
 	for _, it in ipairs(JadeData.ITEMS) do

@@ -16,7 +16,7 @@ export type DailyTask = {
 	rewardStones: number, rewardExp: number,
 }
 
-DailyData.POOL: { DailyTask } = {
+DailyData.POOL = {
 	{ id="d_exp_sm",    title="Morning Cultivation",   icon="☯️",  type="exp_earn",   target=5000,    rewardStones=200,  rewardExp=0    },
 	{ id="d_exp_md",    title="Dedicated Meditation",  icon="🧘",  type="exp_earn",   target=25000,   rewardStones=500,  rewardExp=0    },
 	{ id="d_stones_sm", title="Mine the Veins",        icon="💰",  type="stones_earn", target=300,    rewardStones=0,    rewardExp=2000 },
@@ -27,7 +27,7 @@ DailyData.POOL: { DailyTask } = {
 	{ id="d_seclusion", title="Closed-Door Retreat",   icon="🚪",  type="seclusion",  target=1,       rewardStones=600,  rewardExp=5000 },
 	{ id="d_hunt_ticks",title="Tireless Auto-Hunter",  icon="🏹",  type="realm_hunt", target=50,      rewardStones=400,  rewardExp=4000 },
 	{ id="d_exp_lg",    title="Grand Dao Insight",     icon="✨",  type="exp_earn",   target=100000,  rewardStones=1200, rewardExp=0    },
-}
+} :: { DailyTask }
 
 function DailyData.Get(id: string): DailyTask?
 	for _, t in ipairs(DailyData.POOL) do

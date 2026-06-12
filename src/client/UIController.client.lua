@@ -1948,15 +1948,26 @@ do
 
 	local function rebuildHunt()
 		for _, ch in ipairs(huntList:GetChildren()) do
-			if ch:IsA("Frame") then ch:Destroy() end
+			if ch:IsA("Frame") or ch:IsA("TextLabel") then ch:Destroy() end
 		end
 		local myRealm = (player:GetAttribute("Realm") or 1) :: number
 		local current = (player:GetAttribute("HuntRealm") or 0) :: number
+		local lastWorld = 0
 		for _, r in ipairs(WorldData.Realms()) do
+			-- World section headers (Mortal Earth · Immortal Sky · …)
+			local w = WorldData.GetWorldForRealm(r)
+			if w ~= lastWorld then
+				lastWorld = w
+				local head = Instance.new("TextLabel")
+				head.Size = UDim2.new(1,-6,0,22); head.BackgroundTransparency = 1
+				head.Text = ("— %s —"):format((WorldData.WORLD_NAME[w] or "?"):upper())
+				head.TextColor3 = C.gold; head.TextSize = 12; head.Font = Enum.Font.GothamBold
+				head.LayoutOrder = r * 10 - 5; head.Parent = huntList
+			end
 			local row = Instance.new("Frame")
 			row.Size = UDim2.new(1,-6,0,56); row.BackgroundColor3 = C.bg3
 			corner(row,8); stroke(row, r == current and C.green or C.border)
-			row.LayoutOrder = r; row.Parent = huntList
+			row.LayoutOrder = r * 10; row.Parent = huntList
 			local realmInfo = CultivationData.GetRealm(r)
 			local locked = r > myRealm
 			mkLabel(row, ("%s  ·  %s"):format(WorldData.Theme(r).name, realmInfo and realmInfo.name or "?"),
